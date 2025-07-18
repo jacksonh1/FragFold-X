@@ -1,0 +1,361 @@
+    # %%
+"""
+input:
+- input directory
+- reference pdb
+- output file (defaults to "structure_scores.csv" in the input directory)
+
+
+find all pdb files in the input directory
+calculate a variety of scores for each pdb file
+- which scores to calculate and their parameters should be adjustable
+
+should this be a separate pipeline?
+
+
+output:
+- structure_scores.csv (in the input directory)
+    - pdb information
+    - fragment position
+    - name for fragment source and receptor
+    - parameter file
+    - dockQ score (vs reference)
+        - this will require defining the chains in the reference pdb
+        - for model, the peptide chain is the last chain and the receptor chains are everything before it
+    - rank (from pdb filename)
+    - ipTM score
+"""
+# x = "Q96F46-33to62_vs_Q16552-Q16552_unrelaxed_rank_001_alphafold2_ptm_model_5_seed_000.pdb"
+# regex = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d\.pdb"
+# p = re.compile(regex)
+# m = p.match(x)
+# print(
+#     m.group("fragment_protein"),
+#     int(m.group("fragment_start")),
+#     int(m.group("fragment_end")),
+#     m.group("receptor_proteins"),
+#     int(m.group("rank")),
+# )
+
+
+import pandas as pd
+from pathlib import Path
+import fragfold3.config as config
+import fragfold3.structure_scoring.weighted_contacts as weighted_contacts
+import re
+import tqdm
+from functools import partial
+import multiprocessing
+
+
+def parse_pdb_filename(
+    filename: str | Path,
+    regex=config.PDB_FILENAME_REGEX,
+):
+    filename = Path(filename)
+    p = re.compile(regex)
+    m = p.match(filename.name)
+    if m is None:
+        raise ValueError(f"Filename {filename.name} does not match regex {regex}")
+    d = m.groupdict()
+    d["fragment_start"] = int(d["fragment_start"])
+    d["fragment_end"] = int(d["fragment_end"])
+    d["rank"] = int(d["rank"])
+    # Split on _vs_ separator, then split receptor proteins on '-' only between protein names (not within isoforms)
+    # This assumes receptor_proteins is a string like "P15692-4-P15692-4" or "Q5VWK5-Q5VWK5"
+    d["receptor_proteins"] = re.findall(r'[A-Z0-9]+(?:-\d+)?', d["receptor_proteins"])
+    return d
+
+
+def score_pdb_files(
+    input_directory: Path | str,
+    output_file: Path | str | None = None,
+    regex=config.PDB_FILENAME_REGEX,
+):
+    input_directory = Path(input_directory)
+    if output_file is None:
+        output_file = input_directory / "structure_scores.csv"
+    res = []
+    for p in tqdm.tqdm(list(input_directory.rglob("*.pdb"))):
+        temp = parse_pdb_filename(p, regex)
+        temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2) + 1  # type: ignore
+        d = weighted_contacts.calculate_weighted_contacts(p)
+        temp.update(d)
+        temp["pdb_file"] = str(p.resolve())
+        res.append(temp)
+    structure_scores = pd.DataFrame(res)
+    structure_scores = structure_scores.sort_values(["fragment_start", "rank"])
+
+
+# parse_pdb_filename(
+#     "Q16552-118to147_vs_Q96F46-Q8NAC3_unrelaxed_alphafold2_multimer_v3_model_2_seed_000.pdb"
+# )
+
+# %%
+
+
+def score_pdb(
+    pdb_file: Path | str,
+    regex=config.PDB_FILENAME_REGEX,
+    root: Path | str | None = None,
+    distance_cutoff=3.5,
+    **kwargs,
+):
+    pdb_file = Path(pdb_file)
+    temp = parse_pdb_filename(pdb_file, regex)
+    temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2) + 1 # type: ignore
+    d = weighted_contacts.calculate_weighted_contacts(pdb_file, distance_cutoff=distance_cutoff, **kwargs)
+    temp.update(d)
+    temp["pdb_file"] = str(pdb_file.resolve())
+    fragfold_processing_params = (
+        pdb_file.resolve().parent.parent / "fragfold_params.yaml"
+    )
+    if fragfold_processing_params.exists():
+        if root is not None:
+            temp["fragfold_processing_params"] = str(
+                fragfold_processing_params.resolve().relative_to(root)
+            )
+        else:
+            temp["fragfold_processing_params"] = str(
+                fragfold_processing_params.resolve()
+            )
+    else:
+        print(
+            f"Warning: {fragfold_processing_params} does not exist. No fragfold processing params found for {pdb_file.name}."
+        )
+    if root is not None:
+        temp["pdb_file_relative"] = pdb_file.resolve().relative_to(root)
+    return temp
+
+
+def score_pdb_files_multiprocessing(
+    input_directory: Path | str,
+    output_file: Path | str | None = None,
+    regex=config.PDB_FILENAME_REGEX,
+    pdb_file_pat="*_rank_*.pdb",
+    n_processes=64,
+    distance_cutoff=4.0,
+    **kwargs,
+):
+    input_directory = Path(input_directory)
+    if output_file is None:
+        output_file = input_directory / "structure_scores.csv"
+    res = []
+    pdb_files = [
+        i for i in input_directory.rglob(pdb_file_pat) if "-aligned" not in i.name
+    ]  # aligned?
+    if len(pdb_files) == 0:
+        print(f"No pdb files found in {input_directory}")
+        return
+    with multiprocessing.Pool(n_processes) as p:
+        results_iterator = p.imap_unordered(
+            partial(
+                score_pdb,
+                regex=regex,
+                distance_cutoff=distance_cutoff,
+                **kwargs,
+            ),
+            pdb_files,
+            chunksize=1,
+        )
+        for result in results_iterator:
+            res.append(result)
+    structure_scores = pd.DataFrame(res)
+    # print(structure_scores.head())
+    # breakpoint()
+    structure_scores = structure_scores.sort_values(by=["fragment_start", "rank"])
+    structure_scores.to_csv(output_file, index=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# def score_pdb(
+#     pdb_file: Path | str,
+#     regex=config.PDB_FILENAME_REGEX,
+#     aligned_pdb_dirname: None | str = None,
+#     reference_pdb_name: None | str = None,
+# ):
+#     pdb_file = Path(pdb_file)
+#     temp = parse_pdb_filename(pdb_file, regex)
+#     temp["fragment_center"] = (temp["fragment_start"] + temp["fragment_end"]) / 2  # type: ignore
+#     d = weighted_contacts.calculate_weighted_contacts(pdb_file)
+#     temp.update(d)
+#     temp["pdb_file"] = str(pdb_file.resolve())
+#     fragfold_processing_params = (
+#         pdb_file.resolve().parent.parent / "fragfold_params.yaml"
+#     )
+#     if fragfold_processing_params.exists():
+#         temp["fragfold_processing_params"] = str(
+#             fragfold_processing_params.resolve().relative_to(config.PROJ_ROOT)
+#         )
+#     else:
+#         print(
+#             f"Warning: {fragfold_processing_params} does not exist. No fragfold processing params found for {pdb_file.name}."
+#         )
+#     temp["pdb_file_relative"] = pdb_file.resolve().relative_to(config.PROJ_ROOT)
+
+#     # TODO: Make the below more sane
+#     if reference_pdb_name is not None:
+#         reference_pdb_file = pdb_file.resolve().parent / reference_pdb_name
+#         if reference_pdb_file.exists():
+#             temp["reference_pdb_file_relative"] = str(
+#                 reference_pdb_file.resolve().relative_to(config.PROJ_ROOT)
+#             )
+#         else:
+#             raise FileNotFoundError(f"Reference pdb {reference_pdb_file} not found")
+#             # print(f"Warning: {reference_pdb_file} does not exist. No reference pdb found for {pdb_file.name}.")
+#     if aligned_pdb_dirname is not None:
+#         aligned_pdb_dir = pdb_file.resolve().parent / aligned_pdb_dirname
+#         aligned_pdb = aligned_pdb_dir / pdb_file.name.replace(".pdb", "-aligned.pdb")
+#         if aligned_pdb.exists():
+#             temp["aligned_pdb_file_relative"] = str(
+#                 aligned_pdb.resolve().relative_to(config.PROJ_ROOT)
+#             )
+#         else:
+#             raise FileNotFoundError(f"Aligned pdb {aligned_pdb} not found")
+#             # print(f"Warning: {aligned_pdb} does not exist. No aligned pdb found for {pdb_file.name}.")
+#         if reference_pdb_name is not None:
+#             reference_pdb_file = pdb_file.resolve().parent / reference_pdb_name
+#             aligned_reference_pdb = aligned_pdb_dir / reference_pdb_file.name.replace(
+#                 ".pdb", "-aligned.pdb"
+#             )
+#             if aligned_reference_pdb.exists():
+#                 temp["aligned_reference_pdb_file_relative"] = str(
+#                     aligned_reference_pdb.resolve().relative_to(config.PROJ_ROOT)
+#                 )
+#             else:
+#                 raise FileNotFoundError(
+#                     f"Aligned reference pdb {aligned_reference_pdb} not found"
+#                 )
+#                 # print(f"Warning: {aligned_reference_pdb} does not exist. No aligned reference pdb found for {pdb_file.name}.")
+#     return temp
+
+
+# def score_pdb_files_multiprocessing(
+#     input_directory: Path | str,
+#     output_file: Path | str | None = None,
+#     regex=config.PDB_FILENAME_REGEX,
+#     pdb_file_pat="*_rank_*.pdb",
+#     n_processes=64,
+#     reference_pdb_name: None | Path | str = None,
+#     aligned_pdb_dirname: None | str = None,
+# ):
+#     input_directory = Path(input_directory)
+#     if output_file is None:
+#         output_file = input_directory / "structure_scores.csv"
+#     res = []
+#     pdb_files = [
+#         i for i in input_directory.rglob(pdb_file_pat) if "rank" in i.name
+#     ]  # aligned?
+#     with multiprocessing.Pool(n_processes) as p:
+#         results_iterator = p.imap_unordered(
+#             partial(
+#                 score_pdb,
+#                 regex=regex,
+#                 reference_pdb_name=reference_pdb_name,
+#                 aligned_pdb_dirname=aligned_pdb_dirname,
+#             ),
+#             pdb_files,
+#             chunksize=1,
+#         )
+#         for result in results_iterator:
+#             res.append(result)
+#     structure_scores = pd.DataFrame(res)
+#     structure_scores = structure_scores.sort_values(["fragment_start", "rank"])
+#     structure_scores.to_csv(output_file, index=False)
+
+
+# def score_pdb_files_aligned_multiprocessing(
+#     input_directory: Path | str,
+#     output_file: Path | str | None = None,
+#     regex=config.PDB_FILENAME_REGEX,
+#     pdb_file_pat="*_rank_*.pdb",
+#     n_processes=64,
+#     reference_pdb_name: None | Path | str = None,
+#     aligned_pdb_dir_pat="aligned_pdbs",
+# ):
+#     input_directory = Path(input_directory)
+#     if output_file is None:
+#         output_file = input_directory / "structure_scores.csv"
+#     if reference_pdb_name is not None:
+#         reference_pdb_name = Path(reference_pdb_name).stem + "-aligned.pdb"
+#     aligned_pdb_dirs = [
+#         i for i in input_directory.rglob(aligned_pdb_dir_pat) if i.is_dir()
+#     ]
+#     if len(aligned_pdb_dirs) == 0:
+#         print(f"No aligned pdb directories found in {input_directory}")
+#         print("using the unaligned pdb files")
+#         score_pdb_files_multiprocessing(
+#             input_directory=input_directory,
+#             output_file=output_file,
+#             regex=regex,
+#             pdb_file_pat=pdb_file_pat,
+#             n_processes=n_processes,
+#             # reference_pdb_name: None | Path | str = None,
+#         )
+#     res = []
+#     for aligned_pdb_dir in aligned_pdb_dirs:
+#         if reference_pdb_name is not None:
+#             reference_pdb = aligned_pdb_dir / reference_pdb_name
+#             if not reference_pdb.exists():
+#                 raise FileNotFoundError(f"Reference pdb {reference_pdb} not found")
+#             reference_pdb = reference_pdb.resolve().relative_to(config.PROJ_ROOT)
+#         else:
+#             reference_pdb = None
+#         pdb_files = [i for i in aligned_pdb_dir.rglob(pdb_file_pat)]
+#         with multiprocessing.Pool(n_processes) as p:
+#             results_iterator = p.imap_unordered(
+#                 partial(score_pdb, regex=regex), pdb_files, chunksize=1
+#             )
+#             for result in results_iterator:
+#                 result["reference_pdb"] = reference_pdb
+#                 res.append(result)
+#     structure_scores = pd.DataFrame(res)
+#     structure_scores = structure_scores.sort_values(["fragment_start", "rank"])
+#     structure_scores.to_csv(output_file, index=False)
+
+
+# if __name__ == "__main__":
+#     score_pdb_files_multiprocessing(
+#         output_file="./structure_test.csv",
+#     )
+
+# %%

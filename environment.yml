@@ -1,0 +1,30 @@
+name: fragfold3
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - flake8
+  - isort
+  - black
+  - pip
+  - typer
+  - loguru
+  - tqdm
+  - ipython
+  - jupyterlab
+  - matplotlib
+  - seaborn
+  - notebook
+  - numpy<2
+  - pandas
+  - biopython>=1.80
+  - openpyxl
+  - pymol-open-source
+  - pip:
+    - python-dotenv
+    - localcider
+    - py3Dmol
+    - mkdocs
+    - logomaker
+    - -e .
+    # - -e ../a3mcat/

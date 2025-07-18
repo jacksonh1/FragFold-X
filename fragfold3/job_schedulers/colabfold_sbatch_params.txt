@@ -1,0 +1,7 @@
+--job-name=colabfold
+-n 4
+--partition=mit_normal_gpu
+--output=logs/fragfold_%A_%a.out
+--error=logs/fragfold_%A_%a.err
+--gres=gpu:1
+--mem=20000

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "fragfold3"
+version = "0.0.1"
+description = "A tool to predict how short fragments of proteins bind to full length proteins"
+authors = [
+  { name = "Jackson Halpin" },
+]
+# license = { file = "LICENSE" }
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License"
+]
+requires-python = "~=3.10"
+dependencies = [
+    "importlib-resources",
+    "numpy<2",
+    "python-dotenv",
+    "loguru",
+    "biopython >= 1.8",
+    "pandas",
+#    "a3mcat @ git+https://github.com/jacksonh1/a3mcat.git",
+]
+[project.scripts]
+fragfold3 = "fragfold3.scripts.run_fragfold3:main"
+
+
+# [tool.flit.sdist]
+# include = [
+#     "lir_proteome_screen_pssm/local_data/*",
+# ]
+
+[tool.black]
+line-length = 99
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+)/
+'''
+
