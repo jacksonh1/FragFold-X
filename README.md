@@ -118,7 +118,6 @@ output_directory/
 ## Project Organization
 
 ```
-```
 ├── LICENSE                <- Open-source license if one is chosen
 ├── Makefile               <- Makefile with convenience commands like `make create_environment` or `make requirements`
 ├── README.md              <- The top-level README for developers using this project.
@@ -150,8 +149,8 @@ output_directory/
     ├── config.py          <- Store useful global variables and configuration
     │
     └── ...                <- ...
+```
 
 for notebooks, consider the following naming convention:
 ![image](./docs/image.png)
-```
 
