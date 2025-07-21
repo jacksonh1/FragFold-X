@@ -19,6 +19,8 @@ import a3mcat
 import os
 
 # import fragfold3
+import fragfold3.tools.plotting as plotting
+import matplotlib.pyplot as plt
 import fragfold3.pipeline.parameters as params
 import fragfold3.config as config
 import fragfold3.tools.cli_wrappers as cli_wrappers
@@ -29,6 +31,7 @@ import fragfold3.tools.sequence_utils as seq_utils
 from Bio import Align, AlignIO, Seq, SeqIO
 import fragfold3.job_schedulers.slurm_job_submitter as slurm_job_submitter
 import fragfold3.tools.pymol_utils as pymol_utils
+import fragfold3.pipeline.result_summary as result_summary
 import shutil
 
 def get_colabfold_msa(
@@ -337,6 +340,50 @@ def cleanup(params: params.Fragfold3Params):
         png_file.unlink()
 
 
+def create_summary_csv(params: params.Fragfold3Params):
+    """
+    Post-processing function to handle the results of the ColabFold batch predictions.
+    """
+    predictions_dir = Path(params.output_directory) / "predictions"
+    result_summary.score_pdb_files_multiprocessing(
+        input_directory=predictions_dir,
+        output_file=Path(params.output_directory) / f"structure_scores.csv",
+        n_processes=params.structure_score_params.n_processes,
+        chain_groups=params.structure_score_params.chain_groups,
+        distance_cutoff=params.structure_score_params.contact_distance_cutoff,
+    )
+
+
+def plot_results(params: params.Fragfold3Params):
+    """
+    Generate plots from the summary CSV file.
+    """
+    summary_csv = Path(params.output_directory) / "structure_scores.csv"
+    if not summary_csv.exists():
+        raise FileNotFoundError(
+            f"Summary CSV file {summary_csv} does not exist. Run create_summary_csv first."
+        )
+    filename1 = Path(params.output_directory) / f"position_plot.html"
+    receptors = [i.stem for i in params.receptor_fastas]
+    fragment_source = params.fragment_source_fasta.stem
+    fig, df = plotting.plotly_fragfold_results(
+        summary_csv,
+        fragment_source_label=fragment_source,
+        receptor_labels=receptors,
+        xcol="fragment_start",
+    )
+    fig.write_html(filename1)
+    title = f"fragment source: {fragment_source} - receptor(s): {' + '.join(receptors)}"
+    filename2 = Path(params.output_directory) / f"position_plot.png"
+    fig, ax = plotting.plot_fragfold_results(
+        df=df,
+        title=title,
+        xcol="fragment_start",
+    )
+    fig.savefig(filename2, dpi=300)
+    plt.close(fig)
+
+
 # @app.command()
 def fragfold3_pipeline(
     params: params.Fragfold3Params,
@@ -362,12 +409,16 @@ def fragfold3_pipeline(
         root = Path(root)
         params.convert_paths2relative(root=root)
     params.save(main_output_dir / "fragfold_params.yaml")
+    align_pdbs(params)
+    create_summary_csv(params)
+    cleanup(params)
+    plot_results(params)
 
 
 def fragfold3_pipeline_scheduler(
     params: params.Fragfold3Params,
-    job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
     root: str | Path | None = None,
+    job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
     max_jobs_allowed=2,
     **job_submitter_kwargs,
 ):
@@ -392,7 +443,9 @@ def fragfold3_pipeline_scheduler(
         params.convert_paths2relative(root=root)
     params.save(main_output_dir / "fragfold_params.yaml")
     align_pdbs(params)
+    create_summary_csv(params)
     cleanup(params)
+    plot_results(params)
 
 
 #     # generate summary csv and plots

@@ -1,6 +1,7 @@
 name: fragfold3
 channels:
   - conda-forge
+  - plotly
 dependencies:
   - python=3.10
   - flake8
@@ -20,6 +21,7 @@ dependencies:
   - biopython>=1.80
   - openpyxl
   - pymol-open-source
+  - plotly
   - pip:
     - python-dotenv
     - localcider
@@ -27,4 +29,4 @@ dependencies:
     - mkdocs
     - logomaker
     - -e .
-    # - -e ../a3mcat/
+    - -e ../a3mcat/

@@ -46,17 +46,18 @@ import re
 import tqdm
 from functools import partial
 import multiprocessing
+from loguru import logger
 
 
 def parse_pdb_filename(
     filename: str | Path,
-    regex=config.PDB_FILENAME_REGEX,
+    pdb_filename_regex=config.PDB_FILENAME_REGEX,
 ):
     filename = Path(filename)
-    p = re.compile(regex)
+    p = re.compile(pdb_filename_regex)
     m = p.match(filename.name)
     if m is None:
-        raise ValueError(f"Filename {filename.name} does not match regex {regex}")
+        raise ValueError(f"Filename {filename.name} does not match regex {pdb_filename_regex}")
     d = m.groupdict()
     d["fragment_start"] = int(d["fragment_start"])
     d["fragment_end"] = int(d["fragment_end"])
@@ -120,8 +121,8 @@ def score_pdb(
                 fragfold_processing_params.resolve()
             )
     else:
-        print(
-            f"Warning: {fragfold_processing_params} does not exist. No fragfold processing params found for {pdb_file.name}."
+        logger.warning(
+            f"{fragfold_processing_params} does not exist. No fragfold processing params found for {pdb_file.name}."
         )
     if root is not None:
         temp["pdb_file_relative"] = pdb_file.resolve().relative_to(root)
@@ -133,7 +134,7 @@ def score_pdb_files_multiprocessing(
     output_file: Path | str | None = None,
     regex=config.PDB_FILENAME_REGEX,
     pdb_file_pat="*_rank_*.pdb",
-    n_processes=64,
+    n_processes=None,
     distance_cutoff=4.0,
     **kwargs,
 ):
@@ -145,8 +146,11 @@ def score_pdb_files_multiprocessing(
         i for i in input_directory.rglob(pdb_file_pat) if "-aligned" not in i.name
     ]  # aligned?
     if len(pdb_files) == 0:
-        print(f"No pdb files found in {input_directory}")
+        logger.warning(f"No pdb files found in {input_directory}")
         return
+    if n_processes is None:
+        n_processes = multiprocessing.cpu_count()
+    logger.info(f"Using {n_processes} processes")
     with multiprocessing.Pool(n_processes) as p:
         results_iterator = p.imap_unordered(
             partial(

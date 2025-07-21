@@ -135,5 +135,8 @@ def calculate_weighted_contacts(
         "n_contacts": len(res),
         "iptm": iptm,
         "weighted_contacts": len(res) * iptm,
+        "contact_distance_cutoff": distance_cutoff,
+        "chain_group_a": chain_group_a,
+        "chain_group_b": chain_group_b,
     }
     return res_dict

@@ -33,6 +33,28 @@ class DomainMSA:
 
 
 @define
+class StructureScoreParameters:
+    """
+    Parameters for scoring structures.
+    """
+    contact_distance_cutoff: float = field(default=4.0, converter=float)
+    chain_group_a: list[str] | None = field(default=None)
+    chain_group_b: list[str] | None = field(default=None)
+    # pdb_filename_regex: str | Path = field(default=config.PDB_FILENAME_REGEX)
+    chain_groups: list[list[str]] | None = field(default=None)
+    n_processes: int | None = field(default=None)
+
+    def __attrs_post_init__(self):
+        chain_groups = [self.chain_group_a, self.chain_group_b]
+        if any(chain_groups) and not all(chain_groups):
+            raise ValueError("If one chain group is defined, both must be defined.")
+        if chain_groups[0] is None and chain_groups[1] is None:
+            self.chain_groups = None
+        else:
+            self.chain_groups = chain_groups
+
+
+@define
 class Fragfold3Params:
     """
     """
@@ -75,11 +97,15 @@ class Fragfold3Params:
         validator=validators.in_(["1", "0"]),
         converter=lambda x: str(x) # type: ignore
     )  # 1-based or 0-based indexing for slice coordinates
+    structure_score_params: StructureScoreParameters | None = field(default=StructureScoreParameters())
     
     @classmethod
     def from_dict(cls, d: dict[str, Any]):
         d = copy.deepcopy(d)
-        return cls(**d)
+        return cls(
+            structure_score_params=StructureScoreParameters(**d.pop("structure_score_params", {})),
+            **d
+        )
 
     def __attrs_post_init__(self):
         """
@@ -95,7 +121,7 @@ class Fragfold3Params:
             self.colabfold_batch = config.COLABFOLD_BATCH
         self.colabfold_data = Path(self.colabfold_data)
         if not self.colabfold_data.exists():
-            logger.warning(f"Warning: colabfold_data path {self.colabfold_data} does not exist. Using {config.COLABFOLD_DATA}.")
+            logger.warning(f"colabfold_data path {self.colabfold_data} does not exist. Using {config.COLABFOLD_DATA}.")
             self.colabfold_data = config.COLABFOLD_DATA
         # self._USalign_executable = Path(self._USalign_executable)
 
