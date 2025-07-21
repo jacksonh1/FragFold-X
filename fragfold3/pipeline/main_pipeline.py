@@ -22,7 +22,6 @@ import os
 import fragfold3.tools.plotting as plotting
 import matplotlib.pyplot as plt
 import fragfold3.pipeline.parameters as params
-import fragfold3.config as config
 import fragfold3.tools.cli_wrappers as cli_wrappers
 from typing import Literal, Callable
 from functools import partial
@@ -33,9 +32,10 @@ import fragfold3.job_schedulers.slurm_job_submitter as slurm_job_submitter
 import fragfold3.tools.pymol_utils as pymol_utils
 import fragfold3.pipeline.result_summary as result_summary
 import shutil
+import time
 
 def get_colabfold_msa(
-    fasta_file: str | Path, msa_cache_dir: str | Path = config.MSA_CACHE_DIR, **kwargs
+    fasta_file: str | Path, msa_cache_dir: str | Path, **kwargs
 ) -> Path:
     fasta_file = Path(fasta_file)
     seqs = seq_utils.import_fasta(fasta_file)
@@ -384,76 +384,6 @@ def plot_results(params: params.Fragfold3Params):
     plt.close(fig)
 
 
-# @app.command()
-def fragfold3_pipeline(
-    params: params.Fragfold3Params,
-    root: str | Path | None = None,
-):
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2abs(root=root)
-    prepared_data = setup(params)
-    a3m_files = prepared_data["a3m_files"]
-    af_input_dir = prepared_data["af_input_dir"]
-    predictions_dir = prepared_data["predictions_dir"]
-    run_colabfold_batch(
-        a3m_input_dir=af_input_dir,
-        output_dir=predictions_dir,
-        weights=params.model_weights,  # type: ignore
-        colabfold_executable=params.colabfold_batch,
-        colabfold_data=params.colabfold_data,
-        **params.extra_colabfold_params,
-    )
-    main_output_dir = Path(params.output_directory)
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2relative(root=root)
-    params.save(main_output_dir / "fragfold_params.yaml")
-    align_pdbs(params)
-    create_summary_csv(params)
-    cleanup(params)
-    plot_results(params)
-
-
-def fragfold3_pipeline_scheduler(
-    params: params.Fragfold3Params,
-    root: str | Path | None = None,
-    job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
-    max_jobs_allowed=2,
-    **job_submitter_kwargs,
-):
-    """distribute the individual predictions across any number of nodes using SLURM."""
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2abs(root=root)
-    prepared_data = setup(params)
-    a3m_files = prepared_data["a3m_files"]
-    af_input_dir = prepared_data["af_input_dir"]
-    predictions_dir = prepared_data["predictions_dir"]
-    colab_cmds = get_colabfold_batch_commands(
-        a3m_files_or_directories=a3m_files,
-        output_dir=predictions_dir,
-        parameters=params,
-    )
-    # submit the commands to the job scheduler
-    job_submitter.watch_and_submit(colab_cmds, max_jobs_allowed=max_jobs_allowed, **job_submitter_kwargs)
-    main_output_dir = Path(params.output_directory)
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2relative(root=root)
-    params.save(main_output_dir / "fragfold_params.yaml")
-    align_pdbs(params)
-    create_summary_csv(params)
-    cleanup(params)
-    plot_results(params)
-
-
-#     # generate summary csv and plots
-#     # use the result_summary module to generate the summary csv
-# Consider adding @app.command decorator to automatically allow running from command line
-# use a library to register this function as a pipeline step in the fragfold3 app
-
-
 def get_colabfold_batch_commands(
     a3m_files_or_directories: list[Path],
     output_dir: str | Path,
@@ -477,6 +407,110 @@ def get_colabfold_batch_commands(
         commands.append(command)
         # param_list.append(param_dict)
     return commands
+
+
+# @app.command()
+def fragfold3_pipeline(
+    params: params.Fragfold3Params,
+    root: str | Path | None = None,
+    clean_files: bool = True,
+):
+    if root is not None:
+        root = Path(root)
+        params.convert_paths2abs(root=root)
+    prepared_data = setup(params)
+    a3m_files = prepared_data["a3m_files"]
+    af_input_dir = prepared_data["af_input_dir"]
+    predictions_dir = prepared_data["predictions_dir"]
+    if check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir):
+        print("All jobs already done, skipping colabfold predictions.")
+    else:
+        run_colabfold_batch(
+            a3m_input_dir=af_input_dir,
+            output_dir=predictions_dir,
+            weights=params.model_weights,  # type: ignore
+            colabfold_executable=params.colabfold_batch,
+            colabfold_data=params.colabfold_data,
+            **params.extra_colabfold_params,
+        )
+    align_pdbs(params)
+    create_summary_csv(params)
+    if clean_files:
+        cleanup(params)
+    plot_results(params)
+    main_output_dir = Path(params.output_directory)
+    if root is not None:
+        root = Path(root)
+        params.convert_paths2relative(root=root)
+    params.save(main_output_dir / "fragfold_params.yaml")
+
+
+def check_all_done(input_a3ms: list, predictions_dir: str | Path):
+    """
+    Check if all predictions are done for the given input A3M files.
+    """
+    for a3m_file in input_a3ms:
+        done_flag_file = Path(predictions_dir) / f"{a3m_file.stem}.done.txt"
+        if not done_flag_file.exists():
+            return False
+    return True
+
+
+def fragfold3_pipeline_scheduler(
+    params: params.Fragfold3Params,
+    root: str | Path | None = None,
+    job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
+    max_jobs_allowed=2,
+    clean_files: bool = True,
+    **job_submitter_kwargs,
+):
+    """distribute the individual predictions across any number of nodes using SLURM."""
+    if root is not None:
+        root = Path(root)
+        params.convert_paths2abs(root=root)
+    prepared_data = setup(params)
+    a3m_files = prepared_data["a3m_files"]
+    af_input_dir = prepared_data["af_input_dir"]
+    predictions_dir = prepared_data["predictions_dir"]
+    colab_cmds = get_colabfold_batch_commands(
+        a3m_files_or_directories=a3m_files,
+        output_dir=predictions_dir,
+        parameters=params,
+    )
+    if check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir):
+        print("All jobs already done, skipping colabfold job submission.")
+    else:
+        # submit the commands to the job scheduler
+        job_submitter.watch_and_submit(colab_cmds, max_jobs_allowed=max_jobs_allowed, **job_submitter_kwargs)
+    # wait for all jobs to finish
+    all_done = False
+    timeout_limit = 60 * 60 * 6  # 6 hours
+    start_time = time.time()
+    while not all_done:
+        all_done = check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir)
+        if not all_done:
+            print("Waiting for all jobs to finish...")
+            time.sleep(5)
+        if time.time() - start_time > timeout_limit:
+            print("Timeout reached. Exiting...")
+            break
+    align_pdbs(params)
+    create_summary_csv(params)
+    if clean_files:
+        cleanup(params)
+    plot_results(params)
+    main_output_dir = Path(params.output_directory)
+    if root is not None:
+        root = Path(root)
+        params.convert_paths2relative(root=root)
+    params.save(main_output_dir / "fragfold_params.yaml")
+
+
+#     # generate summary csv and plots
+#     # use the result_summary module to generate the summary csv
+# Consider adding @app.command decorator to automatically allow running from command line
+# use a library to register this function as a pipeline step in the fragfold3 app
+
 
 
 # def colabfold_batch_paramlist_to_commands(

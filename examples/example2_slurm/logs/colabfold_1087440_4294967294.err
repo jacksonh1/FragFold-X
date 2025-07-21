@@ -1,0 +1,2 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1753132467.342587 3083994 mlir_graph_optimization_pass.cc:425] MLIR V1 optimization pass is not enabled

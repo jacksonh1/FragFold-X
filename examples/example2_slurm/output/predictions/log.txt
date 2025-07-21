@@ -1,0 +1,5 @@
+2025-07-21 17:45:27,311 Running colabfold 1.5.5 (09993a8f6ffcfee2c5a7aa0a7ea3148875944df1)
+2025-07-21 17:45:27,543 Running on GPU
+2025-07-21 17:45:27,669 Found 5 citations for tools or databases
+2025-07-21 17:45:27,669 Skipping ftsZ-164to193_vs_ftsZ (already done)
+2025-07-21 17:45:27,669 Done

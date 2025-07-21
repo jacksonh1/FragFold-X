@@ -7,18 +7,8 @@ fragmentation_method: sliding_window
 indexing_base: '0'
 model_weights: alphafold2_ptm
 output_directory: "./output"
-overwrite: true
 receptor_fastas:
 -  "./ftsZ_A0A140NFM6.fasta"
 receptor_slice_coords:
 - [9, 316]
-# - - 9
-  # - 316
-reference_pdb: null
 stride: 1
-structure_score_params:
-  chain_group_a: null
-  chain_group_b: null
-  chain_groups: null
-  contact_distance_cutoff: 4.0
-  n_processes: null

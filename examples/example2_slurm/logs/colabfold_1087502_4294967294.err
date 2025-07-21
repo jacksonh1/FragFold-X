@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/var/spool/slurmd/job1087502/slurm_script", line 8, in <module>
+    sys.exit(main())
+  File "/home/jhalpin/tools/localcolabfold/colabfold-conda/lib/python3.10/site-packages/colabfold/batch.py", line 1857, in main
+    queries, is_complex = get_queries(args.input, args.sort_queries_by)
+  File "/home/jhalpin/tools/localcolabfold/colabfold-conda/lib/python3.10/site-packages/colabfold/input.py", line 125, in get_queries
+    raise OSError(f"{input_path} could not be found")
+OSError: output/input_files/ftsZ-164to193_vs_ftsZ.a3m could not be found

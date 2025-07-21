@@ -245,9 +245,38 @@ def load_config(
     """
     Loads the configuration from a YAML file or user provided dictionary
     and return a Fragfold3Params object. If both `config_file` and `parameters`
-    are None, raise a ValueError. If both `config_file` and `parameters` are
-    provided, they will be combined, with `parameters` overriding any key, value
-    pairs that are also set in the `config_file`.
+    are None, raise a ValueError. If both `config_file` and `**extra_parameters` or `executables_file` are
+    provided, they will be combined, with the following priority for any duplicate keys:
+    `**extra_parameters` > `executables_file` > `config_file`.
+    
+    For example, if `config_file` contains:
+    ```yaml
+    fragment_length: 30
+    ```
+    and `**extra_parameters` contains:
+    ```python
+    fragment_length=50
+    ```
+    then the resulting Fragfold3Params object will have `fragment_length` set to 50.
+    
+    
+
+    Parameters:
+    -----------
+    config_file: str | Path | None
+        Path to the YAML configuration file.
+    root: Path | None
+        Root directory to convert relative paths to absolute paths. If None, paths are assumed to be absolute.
+    executables_file: str | Path | None
+        Path to a YAML file containing paths to required executables. If provided, these will be
+        merged with the parameters from `config_file` and `extra_parameters`.
+    **extra_parameters: dict
+        Additional parameters to override those in `config_file` and `executables_file`.
+    
+    Returns:
+    --------
+    Fragfold3Params
+        The configuration parameters as a Fragfold3Params object.
     """
     # if config_file is None and  is None:
         # raise ValueError("Either config_file or parameters must be provided.")

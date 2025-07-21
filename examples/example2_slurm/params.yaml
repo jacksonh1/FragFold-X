@@ -1,0 +1,14 @@
+fragment_length: 30
+fragment_slice_coords:
+- 162
+- 193
+fragment_source_fasta: "./ftsZ_A0A140NFM6.fasta"
+fragmentation_method: sliding_window
+indexing_base: '0'
+model_weights: alphafold2_ptm
+output_directory: "./output"
+receptor_fastas:
+-  "./ftsZ_A0A140NFM6.fasta"
+receptor_slice_coords:
+- [9, 316]
+stride: 1

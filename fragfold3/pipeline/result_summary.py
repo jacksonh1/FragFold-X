@@ -64,7 +64,7 @@ def parse_pdb_filename(
     d["rank"] = int(d["rank"])
     # Split on _vs_ separator, then split receptor proteins on '-' only between protein names (not within isoforms)
     # This assumes receptor_proteins is a string like "P15692-4-P15692-4" or "Q5VWK5-Q5VWK5"
-    d["receptor_proteins"] = re.findall(r'[A-Z0-9]+(?:-\d+)?', d["receptor_proteins"])
+    d["receptor_proteins"] = re.findall(r'[a-zA-Z0-9]+(?:-\d+)?', d["receptor_proteins"])
     return d
 
 

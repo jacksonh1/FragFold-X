@@ -8,19 +8,11 @@ directory structure was based on CCDS template (https://cookiecutter-data-scienc
 
 A small number of functions were adapted from the original FragFold codebase ([FragFold](https://github.com/swanss/FragFold)) and these cases are noted in the function docstrings where applicable. The only cases of this are in the files `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`
 
-
-## TODO/NOTES
-- I am unhappy with the table/yaml organization I think? What is good is that they are decoupled from the main pipeline
-
-- you can change to 0-based indexing
-or you could include 1-based or 0based as a parameter in the yaml file.
-
-- get glycosylation sites from a csv or annotation file, rather than structures
-- colabfold predicted structures as reference pdbs?
-    - Issue with disordered loops, etc. i.e. the colabfold model reference is not a reliable reference at those positions.
-    - Could do a plddt normalized score. This would be a fragment to full length prediction DockQ score, normalized by full length prediction plddt score.
-
-GPU multiprocessing and multiprocessing for structure scoring should be handled separately.
+## upcoming features:
+- [ ] add more scoring functions
+- [ ] add more example workflows
+- [ ] add more documentation for python module usage
+- [ ] add explanation of wrappers
 
 ## Installation
 
@@ -62,6 +54,7 @@ You can configure the paths to the colabfold installed locally on your machine i
   colabfold_batch: "/path/to/colabfold_batch"
   colabfold_data: "/path/to/colabfold_data"
   ```
+- the paths specified in this file will be used by default when running FragFold3 as long as fragfold3 is installed in editable mode (i.e. using `pip install -e .` or `make create_environment` as shown above).
 
 ##### 2. Using Environment Variables
 - You can override the paths in `executables.yaml` by setting environment variables before running FragFold3.
@@ -80,12 +73,27 @@ You can set these environment variables in your shell profile (e.g., `.bashrc`, 
 
 ## Usage
 
-### Basic Usage
+### Basic Usage - command line
 
 FragFold3 can be run using the main script with a YAML configuration file:
 
 ```bash
-run_fragfold3 --input_params path/to/config.yaml
+fragfold3 --input_params path/to/config.yaml
+```
+
+The `fragfold3` command will be available in your path automatically after installation. But the corresponding python script can also be run directly:
+
+```bash
+python "./fragfold3/scripts/run_fragfold3.py" --input_params path/to/config.yaml
+```
+
+### basic Usage - as a Python module
+Alternatively, you can use FragFold3 as a Python module in your own scripts:
+
+```python
+import fragfold3
+parameters = fragfold3.load_config("path/to/config.yaml")
+fragfold3.fragfold3_pipeline(parameters)
 ```
 
 ### Input Configuration (YAML Parameters)

@@ -55,7 +55,7 @@ def main():
         main_pipeline.fragfold3_pipeline_scheduler(
             params=param_ob,
             root=args.root,
-            max_jobs_allowed=args.max_jobs_allowed,
+            max_jobs_allowed=args.colabfold_max_jobs_allowed,
         )
     elif args.colabfold_scheduler == 'none':
         main_pipeline.fragfold3_pipeline(

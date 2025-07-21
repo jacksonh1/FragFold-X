@@ -23,6 +23,7 @@ dependencies = [
     "loguru",
     "biopython >= 1.8",
     "pandas",
+    "py3Dmol",
 #    "a3mcat @ git+https://github.com/jacksonh1/a3mcat.git",
 ]
 [project.scripts]
