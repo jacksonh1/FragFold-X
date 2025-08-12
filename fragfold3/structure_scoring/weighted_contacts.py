@@ -4,73 +4,7 @@ import json
 import re
 import fragfold3.tools.colabfold_tools as colabfold_tools
 import fragfold3.tools.pdb_tools as pdb_tools
-
-
-
-def is_interchain_contact(
-    res_1,
-    res_2,
-    chain_group_a: None | set | list = None,
-    chain_group_b: None | set | list = None,
-):
-    """
-    returns True if the residues are in different chains or in different chain groups (if defined)
-    This function adapted from original FragFold https://github.com/swanss/FragFold
-    """
-    res1_chain = res_1.get_parent().id
-    res2_chain = res_2.get_parent().id
-    if chain_group_a is None and chain_group_b is None:
-        return res1_chain != res2_chain
-    assert (
-        chain_group_a is not None and chain_group_b is not None
-    ), f"if 1 chain group is defined, you must define the other. chain groups: {chain_group_a=}, {chain_group_b=}"
-    if res1_chain in chain_group_a and res2_chain in chain_group_b:
-        return True
-    if res1_chain in chain_group_b and res2_chain in chain_group_a:
-        return True
-    return False
-
-
-def get_interchain_contacts(
-    structure,
-    contact_distance=4.0,
-    chain_group_a=None,
-    chain_group_b=None,
-):
-    '''
-    This function adapted from original FragFold https://github.com/swanss/FragFold
-    '''
-    ns = NeighborSearch([x for x in structure.get_atoms()])
-    nearby_res = ns.search_all(contact_distance, "R")
-    contacts = [
-        (x, y)
-        for x, y in nearby_res # type: ignore
-        if is_interchain_contact(x, y, chain_group_a, chain_group_b)
-    ]
-    return contacts
-
-
-def get_interchain_contacts_from_pdb(
-    pdb_file: str | Path,
-    distance_cutoff: float | int = 4.0,
-    chain_group_a: list[str] | None = None,
-    chain_group_b: list[str] | None = None,
-):
-    '''
-    This function adapted from original FragFold https://github.com/swanss/FragFold
-    '''
-    pdb_file = Path(pdb_file)
-    parser = PDBParser(QUIET=True)
-    s = parser.get_structure("s", pdb_file)
-    contacts = pdb_tools.contacts_to_strings(
-        get_interchain_contacts(
-            s,
-            contact_distance=distance_cutoff,
-            chain_group_a=chain_group_a,
-            chain_group_b=chain_group_b,
-        )
-    )
-    return contacts
+import fragfold3.structure_scoring.contacts as contacts
 
 
 def calculate_weighted_contacts(
@@ -124,7 +58,7 @@ def calculate_weighted_contacts(
         chain_group_b = [chains[-1]]
     else:
         chain_group_a, chain_group_b = chain_groups
-    res = get_interchain_contacts_from_pdb(
+    res = contacts.get_interchain_contacts_from_pdb(
         pdb_file,
         distance_cutoff=distance_cutoff,
         chain_group_a=chain_group_a,

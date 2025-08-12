@@ -34,6 +34,58 @@ import fragfold3.pipeline.result_summary as result_summary
 import shutil
 import time
 
+
+class EmptyMSA:
+
+    def __init__(self, fasta: str | Path, domain_start: int, domain_end: int):
+        self.fasta = Path(fasta)
+        protein = a3mcat.import_fasta(self.fasta)
+        if len(protein) != 1:
+            raise ValueError(
+                f"Expected exactly one sequence in {self.fasta} to build empty a3m, found {len(protein)}."
+            )
+        protein = protein[0]
+        self.name = protein.header
+        self.domain_start = domain_start
+        self.domain_end = domain_end
+        self.msa = a3mcat.MSAa3m.empty_MSA(sequence=protein.seq_str)
+        self.sliced_msa = self.msa[domain_start : domain_end + 1]
+
+    def __repr__(self):
+        return f"EmptyMSA(\nfasta={self.fasta}, \ndomain_start={self.domain_start}, \ndomain_end={self.domain_end}\nname={self.name})"
+
+
+
+class DomainMSA:
+
+    def __init__(self, msa_file: str | Path, domain_start: int, domain_end: int):
+        self.msa_file = Path(msa_file)
+        self.name = self.msa_file.stem
+        self.domain_start = domain_start
+        self.domain_end = domain_end
+        self.msa = self._import_a3m()
+        # if domain_start <0:
+        #     domain_start = 0
+        # if domain_end <0:
+        #     domain_end = len(self.msa.query.seq_str) - 1
+        self.sliced_msa = self.msa[domain_start : domain_end + 1]
+
+    def _import_a3m(self) -> a3mcat.MSAa3m:
+        """
+        Import the receptor MSA using a3mcat.
+        """
+        if not self.msa_file.exists():
+            raise FileNotFoundError(f"MSA file {self.msa_file} does not exist.")
+        a3m = a3mcat.MSAa3m.from_a3m_file(self.msa_file)
+        return a3m
+
+    def __repr__(self):
+        return f"DomainMSA(\nmsa_file={self.msa_file}, \ndomain_start={self.domain_start}, \ndomain_end={self.domain_end})"
+
+# ==============================================================================
+# // colabfold related functions
+# ==============================================================================
+
 def get_colabfold_msa(
     fasta_file: str | Path, msa_cache_dir: str | Path, **kwargs
 ) -> Path:
@@ -65,32 +117,58 @@ def get_colabfold_msa(
     return msa_file
 
 
-class DomainMSA:
+def run_colabfold_batch(
+    a3m_input_dir: str | Path, output_dir: str | Path, weights: str, **kwargs
+):
+    a3m_input_dir = Path(a3m_input_dir)
+    cli_wrappers.colabfold_batch_wrapper(
+        input_file_or_directory=a3m_input_dir,
+        output_dir=output_dir,
+        weights=weights,  # type: ignore
+        **kwargs,  # pass any additional arguments needed for colabfold
+    )
+    # for input_file in a3m_input_dir.glob("*.a3m"):
+    #     done_file = Path(output_dir) / f"{input_file.stem}.done.txt"
+    #     if done_file.exists():
+    #         print(
+    #             f"Skipping {input_file} as {done_file} already exists. Remove it to rerun."
+    #         )
+    #         continue
+    #     cli_wrappers.colabfold_batch_wrapper(
+    #         input_file_or_directory=input_file,
+    #         output_dir=output_dir,
+    #         weights=weights,  # type: ignore
+    #         **kwargs,  # pass any additional arguments needed for colabfold
+    #     )
 
-    def __init__(self, msa_file: str | Path, domain_start: int, domain_end: int):
-        self.msa_file = Path(msa_file)
-        self.name = self.msa_file.stem
-        self.domain_start = domain_start
-        self.domain_end = domain_end
-        self.msa = self._import_a3m()
-        # if domain_start <0:
-        #     domain_start = 0
-        # if domain_end <0:
-        #     domain_end = len(self.msa.query.seq_str) - 1
-        self.sliced_msa = self.msa[domain_start : domain_end + 1]
 
-    def _import_a3m(self) -> a3mcat.MSAa3m:
-        """
-        Import the receptor MSA using a3mcat.
-        """
-        if not self.msa_file.exists():
-            raise FileNotFoundError(f"MSA file {self.msa_file} does not exist.")
-        a3m = a3mcat.MSAa3m.from_a3m_file(self.msa_file)
-        return a3m
+def get_colabfold_batch_commands(
+    a3m_files_or_directories: list[Path],
+    output_dir: str | Path,
+    parameters: params.Fragfold3Params,
+):
+    # param_list = []
+    commands = []
+    for input_path in a3m_files_or_directories:
+        param_dict = {
+            "input_file_or_directory": input_path,
+            "output_dir": output_dir,
+            "weights": parameters.model_weights,  # type: ignore
+            "colabfold_executable": parameters.colabfold_batch,
+            "colabfold_data": parameters.colabfold_data,
+        }
+        param_dict.update(parameters.extra_colabfold_params)
+        command = cli_wrappers.colabfold_batch_wrapper(
+            **param_dict,
+            run=False,
+        )
+        commands.append(command)
+        # param_list.append(param_dict)
+    return commands
 
-    def __repr__(self):
-        return f"DomainMSA(\nmsa_file={self.msa_file}, \ndomain_start={self.domain_start}, \ndomain_end={self.domain_end})"
-
+# ==============================================================================
+# // generate fragment indices
+# ==============================================================================
 
 def gen_fragment_indices_by_overlap(
     length: int, overlap: int, fragment_length: int
@@ -171,62 +249,36 @@ def gen_fragment_indices_by_sliding(
         i += stride
     return indices
 
-
-def run_colabfold_batch(
-    a3m_input_dir: str | Path, output_dir: str | Path, weights: str, **kwargs
-):
-    a3m_input_dir = Path(a3m_input_dir)
-    cli_wrappers.colabfold_batch_wrapper(
-        input_file_or_directory=a3m_input_dir,
-        output_dir=output_dir,
-        weights=weights,  # type: ignore
-        **kwargs,  # pass any additional arguments needed for colabfold
-    )
-    # for input_file in a3m_input_dir.glob("*.a3m"):
-    #     done_file = Path(output_dir) / f"{input_file.stem}.done.txt"
-    #     if done_file.exists():
-    #         print(
-    #             f"Skipping {input_file} as {done_file} already exists. Remove it to rerun."
-    #         )
-    #         continue
-    #     cli_wrappers.colabfold_batch_wrapper(
-    #         input_file_or_directory=input_file,
-    #         output_dir=output_dir,
-    #         weights=weights,  # type: ignore
-    #         **kwargs,  # pass any additional arguments needed for colabfold
-    #     )
-
-
-def clear_input_a3ms(input_a3m_dir: str | Path):
-    """
-    Clear the input a3m files in the specified directory.
-    """
-    input_a3m_dir = Path(input_a3m_dir)
-    print(
-        f"clearing {len(list(input_a3m_dir.glob('*.a3m')))} a3m files from {input_a3m_dir}."
-    )
-    for input_file in input_a3m_dir.glob("*.a3m"):
-        input_file.unlink()  # remove the file
-
+# ==============================================================================
+# // a3m preparation functions
+# ==============================================================================
 
 def prepare_receptor_msa(
     receptor_fastas: list[str | Path],
     receptor_slice_coords: list[tuple[int, int]],
     msa_cache_dir: str | Path,
+    use_msas: bool = True,
     **kwargs,
 ):
     _receptor_msas = []
     for fasta_file, domain_coords in zip(receptor_fastas, receptor_slice_coords):
-        msa_file = get_colabfold_msa(
-            fasta_file=fasta_file,
-            msa_cache_dir=msa_cache_dir,
-            **kwargs,
-        )
-        domain_msa = DomainMSA(
-            msa_file=msa_file,
-            domain_start=domain_coords[0],
-            domain_end=domain_coords[1],
-        )
+        if use_msas:
+            msa_file = get_colabfold_msa(
+                fasta_file=fasta_file,
+                msa_cache_dir=msa_cache_dir,
+                **kwargs,
+            )
+            domain_msa = DomainMSA(
+                msa_file=msa_file,
+                domain_start=domain_coords[0],
+                domain_end=domain_coords[1],
+            )
+        else:
+            domain_msa = EmptyMSA(
+                fasta=fasta_file,
+                domain_start=domain_coords[0],
+                domain_end=domain_coords[1],
+            )
         _receptor_msas.append(domain_msa)
     receptor_msa = _receptor_msas[0].sliced_msa
     receptor_name = _receptor_msas[0].name
@@ -240,18 +292,26 @@ def prepare_fragment_source_msa(
     fragment_source_fasta: str | Path,
     fragment_slice_coords: tuple[int, int],
     msa_cache_dir: str | Path,
+    use_msa: bool = True,
     **kwargs,
 ):
-    fragment_source_msa_file = get_colabfold_msa(
-        fasta_file=fragment_source_fasta,
-        msa_cache_dir=msa_cache_dir,
-        **kwargs,
-    )
-    fragment_source_domainMSA = DomainMSA(
-        msa_file=fragment_source_msa_file,
-        domain_start=fragment_slice_coords[0],
-        domain_end=fragment_slice_coords[1],
-    )
+    if use_msa:
+        fragment_source_msa_file = get_colabfold_msa(
+            fasta_file=fragment_source_fasta,
+            msa_cache_dir=msa_cache_dir,
+            **kwargs,
+        )
+        fragment_source_domainMSA = DomainMSA(
+            msa_file=fragment_source_msa_file,
+            domain_start=fragment_slice_coords[0],
+            domain_end=fragment_slice_coords[1],
+        )
+    else:
+        fragment_source_domainMSA = EmptyMSA(
+            fasta=fragment_source_fasta,
+            domain_start=fragment_slice_coords[0],
+            domain_end=fragment_slice_coords[1],
+        )
     fragment_source_msa = fragment_source_domainMSA.sliced_msa
     fragment_source_name = fragment_source_domainMSA.name
     return fragment_source_msa, fragment_source_name
@@ -268,6 +328,7 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
         msa_cache_dir=params.msa_cache_dir,
         colabfold_executable=params.colabfold_batch,
         colabfold_data=params.colabfold_data,
+        use_msas=params.use_receptor_msas,
     )
     fragment_source_msa, fragment_source_name = prepare_fragment_source_msa(
         fragment_source_fasta=params.fragment_source_fasta,
@@ -275,6 +336,7 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
         msa_cache_dir=params.msa_cache_dir,
         colabfold_executable=params.colabfold_batch,
         colabfold_data=params.colabfold_data,
+        use_msa=params.use_fragment_msa,
     )
     # print(f"fragment source msa: {fragment_source_msa}")
     fragment_indices = gen_fragment_indices_by_sliding(
@@ -293,6 +355,9 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
         a3m_files.append(file_name)
     return a3m_files, af_input_dir
 
+# ==============================================================================
+# // pre-colabfold processing functions
+# ==============================================================================
 
 def setup(
     params: params.Fragfold3Params,
@@ -312,6 +377,21 @@ def setup(
         "predictions_dir": predictions_dir,
     }
 
+# ==============================================================================
+# // post-colabfold processing functions
+# ==============================================================================
+
+def clear_input_a3ms(input_a3m_dir: str | Path):
+    """
+    Clear the input a3m files in the specified directory.
+    """
+    input_a3m_dir = Path(input_a3m_dir)
+    print(
+        f"clearing {len(list(input_a3m_dir.glob('*.a3m')))} a3m files from {input_a3m_dir}."
+    )
+    for input_file in input_a3m_dir.glob("*.a3m"):
+        input_file.unlink()  # remove the file
+
 
 def align_pdbs(
     params: params.Fragfold3Params,
@@ -323,7 +403,6 @@ def align_pdbs(
         input_pdb_files=pdb_files,
         output_dir=predictions_dir,
     )
-
 
 
 def cleanup(params: params.Fragfold3Params):
@@ -384,29 +463,19 @@ def plot_results(params: params.Fragfold3Params):
     plt.close(fig)
 
 
-def get_colabfold_batch_commands(
-    a3m_files_or_directories: list[Path],
-    output_dir: str | Path,
-    parameters: params.Fragfold3Params,
-):
-    # param_list = []
-    commands = []
-    for input_path in a3m_files_or_directories:
-        param_dict = {
-            "input_file_or_directory": input_path,
-            "output_dir": output_dir,
-            "weights": parameters.model_weights,  # type: ignore
-            "colabfold_executable": parameters.colabfold_batch,
-            "colabfold_data": parameters.colabfold_data,
-        }
-        param_dict.update(parameters.extra_colabfold_params)
-        command = cli_wrappers.colabfold_batch_wrapper(
-            **param_dict,
-            run=False,
-        )
-        commands.append(command)
-        # param_list.append(param_dict)
-    return commands
+# ==============================================================================
+# // main pipeline functions
+# ==============================================================================
+
+def check_all_done(input_a3ms: list, predictions_dir: str | Path):
+    """
+    Check if all colabfold predictions are done for the given input A3M files.
+    """
+    for a3m_file in input_a3ms:
+        done_flag_file = Path(predictions_dir) / f"{a3m_file.stem}.done.txt"
+        if not done_flag_file.exists():
+            return False
+    return True
 
 
 # @app.command()
@@ -445,21 +514,10 @@ def fragfold3_pipeline(
     params.save(main_output_dir / "fragfold_params.yaml")
 
 
-def check_all_done(input_a3ms: list, predictions_dir: str | Path):
-    """
-    Check if all predictions are done for the given input A3M files.
-    """
-    for a3m_file in input_a3ms:
-        done_flag_file = Path(predictions_dir) / f"{a3m_file.stem}.done.txt"
-        if not done_flag_file.exists():
-            return False
-    return True
-
-
 def fragfold3_pipeline_scheduler(
     params: params.Fragfold3Params,
-    root: str | Path | None = None,
     job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
+    root: str | Path | None = None,
     max_jobs_allowed=2,
     clean_files: bool = True,
     **job_submitter_kwargs,
@@ -504,83 +562,3 @@ def fragfold3_pipeline_scheduler(
         root = Path(root)
         params.convert_paths2relative(root=root)
     params.save(main_output_dir / "fragfold_params.yaml")
-
-
-#     # generate summary csv and plots
-#     # use the result_summary module to generate the summary csv
-# Consider adding @app.command decorator to automatically allow running from command line
-# use a library to register this function as a pipeline step in the fragfold3 app
-
-
-
-# def colabfold_batch_paramlist_to_commands(
-#     colabfold_batch_params: list[dict[str, Any]],
-# ) -> list[str]:
-#     """
-#     Convert a list of colabfold batch parameters to a list of command strings.
-#     """
-#     commands = []
-#     for params in colabfold_batch_params:
-#         command = cli_wrappers.colabfold_batch_wrapper(
-#             **params,
-#             run=False,
-#         )
-#         commands.append(command)
-#     return commands
-
-
-# def worker(args):
-#     gpu_id, input_a3m, func = args
-#     # Set GPU for this process
-#     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-#     func(input_file_or_directory=input_a3m)
-
-
-# def colabfold_prediction_by_a3m_file(
-#     a3m_files: list[Path],
-#     output_dir: str | Path,
-#     parameters: params.Fragfold3Params,
-#     n_gpus: int = 1,
-# ):
-#     colab_part = partial(
-#         cli_wrappers.colabfold_batch_wrapper,
-#         output_dir=output_dir,
-#         weights=parameters.model_weights,  # type: ignore
-#         colabfold_executable=parameters._colabfold_batch,
-#         colabfold_data=parameters._colabfold_data,
-#         **parameters.extra_colabfold_params,
-#     )
-#     args_list = [
-#         (i % n_gpus, a3m_file, colab_part) for i, a3m_file in enumerate(a3m_files)
-#     ]
-#     with multiprocessing.Pool(n_gpus) as p:
-#         results_iterator = p.imap_unordered(worker, args_list, chunksize=1)
-#         for result in results_iterator:
-#             pass
-
-
-# def setup_and_get_colabfold_params(
-#     params: params.Fragfold3Params,
-#     prediction_mode: Literal["directory", "files"] = "directory",
-# ) -> list[dict[str, Any]]:
-#     """
-#     Setup the input files and return a list of parameters for colabfold batch.
-#     This is useful for exporting the colabfold batch running parameters
-#     for further processing (e.g. maybe splitting across nodes).
-#     """
-#     if prediction_mode not in ["directory", "files"]:
-#         raise ValueError(
-#             f"prediction_mode must be either 'directory' or 'files', you provided {prediction_mode}"
-#         )
-#     prepared_data = setup(params)
-#     if prediction_mode == "directory":
-#         input_paths = prepared_data["af_input_dir"]
-#     elif prediction_mode == "files":
-#         input_paths = prepared_data["a3m_files"]
-#     predictions_dir = prepared_data["predictions_dir"]
-#     param_list = get_colabfold_batch_params_as_list(
-#         a3m_files_or_directories=input_paths,
-#         output_dir=predictions_dir,
-#         parameters=params,
-#     )
-#     return param_list

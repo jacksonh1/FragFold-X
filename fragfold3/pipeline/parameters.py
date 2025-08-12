@@ -41,7 +41,7 @@ class StructureScoreParameters:
     chain_group_a: list[str] | None = field(default=None)
     chain_group_b: list[str] | None = field(default=None)
     # pdb_filename_regex: str | Path = field(default=config.PDB_FILENAME_REGEX)
-    chain_groups: list[list[str]] | None = field(default=None)
+    chain_groups: list[list[str]] | None = field(init=False, default=None)
     n_processes: int | None = field(default=None)
 
     def __attrs_post_init__(self):
@@ -71,6 +71,8 @@ class Fragfold3Params:
     colabfold_batch: str | Path = field(default=config.COLABFOLD_BATCH)
     colabfold_data: str | Path = field(default=config.COLABFOLD_DATA)
     # _USalign_executable: str | Path = field(default=config.USALIGN_EXECUTABLE)
+    use_fragment_msa: bool = field(default=True, converter=bool)
+    use_receptor_msas: bool = field(default=True, converter=bool)
     model_weights: str = field(
         default="alphafold2_ptm",
         validator=validators.in_(

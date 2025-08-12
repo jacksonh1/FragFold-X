@@ -5,7 +5,7 @@ from Bio.PDB import PDBParser # type: ignore
 from pathlib import Path
 import numpy as np
 from Bio.SeqUtils import seq1
-
+from Bio.Data import IUPACData
 
 def contacts_to_strings(contacts):
     '''
@@ -154,3 +154,22 @@ def aa_three_to_one(aa):
     }
     return aa_dict.get(aa, 'X')  # 'X' for unknown amino acids
  
+
+def check_residue_numbering_with_pdb(pdb_file, residue, number, chain_id):
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure('structure', pdb_file)
+    for model in structure:
+        for chain in model:
+            if chain.id == chain_id:
+                for res in chain:
+                    if res.get_id()[1] == number:
+                        resname = res.get_resname().capitalize()
+                        if resname in IUPACData.protein_letters_3to1:
+                            one_letter = IUPACData.protein_letters_3to1[resname]
+                        else:
+                            raise ValueError(f"Unknown residue name: {resname}")
+                        if one_letter == residue:
+                            return True
+                        else:
+                            raise ValueError(f"Residue mismatch: expected {residue} ({number}), found {one_letter} ({res.get_id()[1]})")
+    raise ValueError(f"Residue {residue} with number {number} not found in chain {chain_id} of the PDB file.")

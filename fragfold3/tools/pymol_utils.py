@@ -1,4 +1,6 @@
 from pathlib import Path
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 
 import pymol
@@ -65,3 +67,67 @@ def align_pdbs_in_dir_and_overwrite(input_dir):
     input_dir = Path(input_dir)
     pdb_files = list(input_dir.glob("*.pdb"))
     align_pdbs(pdb_files, input_dir)  # Overwrites original files
+
+
+def color_residues_pymol(df, pdb_file, chain='B', colormap='magma', session_name=None, vmax=None, vmin=None):
+    """
+    Color residues in PyMOL based on residue-value mapping for a specific chain
+    """
+    cmd.reinitialize()
+    cmd.load(pdb_file)
+    cmap = plt.get_cmap(colormap)
+    if vmax is None:
+        vmax = df['value'].max()
+    if vmin is None:
+        vmin = df['value'].min()
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    for idx, row in df.iterrows():
+        resi = row['resi']
+        value = row['value']
+        color_rgba = cmap(norm(value))
+        color_rgb = color_rgba[:3]  # Remove alpha channel
+        color_name = f"res_{resi}_color"
+        cmd.set_color(color_name, color_rgb)
+        selection = f"resi {resi} and chain {chain}"
+        cmd.color(color_name, selection)
+    cmd.show("cartoon", f"chain {chain}")
+    cmd.hide("lines")
+    cmd.color("gray80", f"not chain {chain}")
+    if session_name is None:
+        session_filename = Path(pdb_file).stem + f"_{chain}_colored.pse"
+        session_name = Path(pdb_file).parent / session_filename
+    cmd.save(session_name)
+    print(f"PyMOL session saved as: {session_name}")
+
+
+def align_and_get_chain_rmsd(pdb_file1, pdb_file2, chain1='A', chain2='A'):
+    """
+    Aligns two PDB files on specified chains and returns the RMSD between those chains.
+
+    Parameters
+    ----------
+    pdb_file1 : str or pathlib.Path
+        Path to the first PDB file (reference).
+    pdb_file2 : str or pathlib.Path
+        Path to the second PDB file (to be aligned).
+    chain1 : str
+        Chain identifier in the first PDB file.
+    chain2 : str
+        Chain identifier in the second PDB file.
+
+    Returns
+    -------
+    float
+        The RMSD between the aligned chains.
+    """
+    cmd.reinitialize()
+    obj1 = "obj1"
+    obj2 = "obj2"
+    cmd.load(str(pdb_file1), obj1)
+    cmd.load(str(pdb_file2), obj2)
+    sel1 = f"{obj1} and chain {chain1}"
+    sel2 = f"{obj2} and chain {chain2}"
+    result = cmd.align(sel2, sel1)
+    rmsd = result[0]  # RMSD is the first element
+    cmd.delete("all")
+    return rmsd

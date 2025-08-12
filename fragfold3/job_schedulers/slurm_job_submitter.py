@@ -147,7 +147,7 @@ colabfold_sbatch_submitter = SlurmJobSubmitter(
     sbatch_param_file=COLABFOLD_SBATCH_PARAM_FILE,
     logger=logger
 )
-print(colabfold_sbatch_submitter._create_sbatch_param_str())
+# print(colabfold_sbatch_submitter._create_sbatch_param_str())
 # def read_sbatch_param_file_txt(sbatch_param_file: str) -> str:
 #     """
 #     DEPRECATED: Reads the sbatch parameters from a file and returns them as a single string.

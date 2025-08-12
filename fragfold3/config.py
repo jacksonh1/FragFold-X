@@ -53,7 +53,7 @@ load_dotenv()
 # // main project paths
 # ==============================================================================
 PROJ_ROOT = Path(__file__).resolve().parents[1]
-# PROJ_ROOT = Path(os.environ.get("PROJ_ROOT", str(PROJ_ROOT)))
+PROJ_ROOT = Path(os.environ.get("PROJ_ROOT", str(PROJ_ROOT)))
 logger.info(f"fragfold3 PROJ_ROOT path is: {PROJ_ROOT}")
 DATA_DIR = PROJ_ROOT / "data"
 MSA_CACHE_DIR = DATA_DIR / "MSAs/colabfold_mmseqs"  # directory for storing MSA files
