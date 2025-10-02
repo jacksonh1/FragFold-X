@@ -58,7 +58,8 @@ def colabfold_batch_MSA_wrapper(
     colabfold_executable: str = env.COLABFOLD_BATCH,
     colabfold_data: str = env.COLABFOLD_DATA,
 ):
-    subprocess.run("export MPLBACKEND=Agg", shell=True, check=True)
+    # subprocess.run("export MPLBACKEND=Agg", shell=True, check=True)
+    os.environ["JAX_PLATFORMS"] = "cpu"
     colab_command = f'{colabfold_executable} --msa-only --data "{colabfold_data}" --msa-only "{input_file}" "{output_dir}"'
     subprocess.run(colab_command, shell=True, check=True)
 

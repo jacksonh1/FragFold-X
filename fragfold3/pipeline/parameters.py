@@ -117,6 +117,8 @@ class Fragfold3Params:
         self.receptor_fastas = [Path(f) for f in self.receptor_fastas]
         self.msa_cache_dir = Path(self.msa_cache_dir)
         self.output_directory = Path(self.output_directory)
+        if self.reference_pdb is not None:
+            self.reference_pdb = Path(self.reference_pdb)
         self.colabfold_batch = Path(self.colabfold_batch)
         if not self.colabfold_batch.exists():
             logger.warning(f"colabfold_batch path {self.colabfold_batch} does not exist. Using {config.COLABFOLD_BATCH}.")
@@ -135,6 +137,8 @@ class Fragfold3Params:
         self.fragment_source_fasta = root / Path(self.fragment_source_fasta)
         self.receptor_fastas = [root / Path(f) for f in self.receptor_fastas]
         self.msa_cache_dir = root / Path(self.msa_cache_dir)
+        if self.reference_pdb is not None:
+            self.reference_pdb = root / Path(self.reference_pdb)
         self.output_directory = root / Path(self.output_directory)
 
     def convert_paths2relative(self,  root: str | Path):
@@ -144,6 +148,8 @@ class Fragfold3Params:
         self.fragment_source_fasta = Path(self.fragment_source_fasta).resolve().relative_to(root)
         self.receptor_fastas = [Path(f).resolve().relative_to(root) for f in self.receptor_fastas]
         self.msa_cache_dir = Path(self.msa_cache_dir).resolve().relative_to(root)
+        if self.reference_pdb is not None:
+            self.reference_pdb = Path(self.reference_pdb).resolve().relative_to(root)
         self.output_directory = Path(self.output_directory).resolve().relative_to(root)
 
     def to_writable_dict(self) -> dict[str, Any]:

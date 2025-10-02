@@ -63,6 +63,22 @@ def extract_chain_sequence_from_resnames(input_file, chain_id='B'):
     raise ValueError(f"Chain {chain_id} not found in PDB file {input_file}")
 
 
+def extract_sequences_from_pdb(input_file):
+    file_extension = os.path.splitext(input_file)[1].lower()
+    if file_extension == '.pdb':
+        parser = PDBParser(QUIET=True)
+    elif file_extension == '.cif':
+        parser = MMCIFParser(QUIET=True)
+    else:
+        raise ValueError("Unsupported file format. Please use .pdb or .cif files.")
+    structure = parser.get_structure("structure", input_file)
+    ppb = PPBuilder()
+    sequences = {}
+    for pp in ppb.build_peptides(structure[0]): # type: ignore
+        chain_id = pp[0].get_parent().id
+        sequences[chain_id] = str(pp.get_sequence())
+    return sequences
+
 def extract_chain_sequence_from_coords(input_file, chain_id='B'):
     file_extension = os.path.splitext(input_file)[1].lower()
     if file_extension == '.pdb':

@@ -33,6 +33,7 @@ import fragfold3.tools.pymol_utils as pymol_utils
 import fragfold3.pipeline.result_summary as result_summary
 import shutil
 import time
+from loguru import logger
 
 
 class EmptyMSA:
@@ -321,7 +322,8 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
     af_input_dir = Path(params.output_directory) / "input_files"
     af_input_dir.mkdir(exist_ok=True, parents=True)
     # clear any existing a3m files in the input directory
-    clear_input_a3ms(af_input_dir)
+    if params.overwrite:
+        clear_input_a3ms(af_input_dir)
     receptor_msa, receptor_name = prepare_receptor_msa(
         receptor_fastas=params.receptor_fastas,
         receptor_slice_coords=params.receptor_slice_coords,
@@ -348,11 +350,14 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
     for fragment_index in fragment_indices:
         start, end = fragment_index
         name = f"{fragment_source_name}-{params.fragment_slice_coords[0] + int(params.indexing_base) + start}to{params.fragment_slice_coords[0] + int(params.indexing_base) + end}_vs_{receptor_name}"
+        file_name = af_input_dir / f"{name}.a3m"
+        a3m_files.append(file_name)
+        if file_name.exists():
+            logger.info(f"{file_name} exists. Skipping")
+            continue
         fragment_msa = fragment_source_msa[start : end + 1]
         prediction_input_a3m = receptor_msa + fragment_msa
-        file_name = af_input_dir / f"{name}.a3m"
         prediction_input_a3m.save(file_name)
-        a3m_files.append(file_name)
     return a3m_files, af_input_dir
 
 # ==============================================================================
@@ -363,10 +368,10 @@ def setup(
     params: params.Fragfold3Params,
 ):
     main_output_dir = Path(params.output_directory)
-    if main_output_dir.exists() and not params.overwrite:
-        raise FileExistsError(
-            f"Output directory {main_output_dir} already exists. Set `overwrite=True` to overwrite."
-        )
+    # if main_output_dir.exists() and not params.overwrite:
+    #     raise FileExistsError(
+    #         f"Output directory {main_output_dir} already exists. Set `overwrite=True` to overwrite."
+    #     )
     main_output_dir.mkdir(exist_ok=True, parents=True)
     a3m_files, af_input_dir = prepare_input_a3ms(params)
     predictions_dir = main_output_dir / "predictions"
@@ -397,12 +402,14 @@ def align_pdbs(
     params: params.Fragfold3Params,
 ) -> None:
     predictions_dir = Path(params.output_directory) / "predictions"
+    logger.info(f"aligning pdb files in {predictions_dir}")
     # get the list of PDB files in the predictions directory
     pdb_files = list(predictions_dir.glob("*.pdb"))
     pymol_utils.align_pdbs(
         input_pdb_files=pdb_files,
         output_dir=predictions_dir,
     )
+    logger.info(f"finished aligning pdb files in {predictions_dir}")
 
 
 def cleanup(params: params.Fragfold3Params):
@@ -424,6 +431,7 @@ def create_summary_csv(params: params.Fragfold3Params):
     Post-processing function to handle the results of the ColabFold batch predictions.
     """
     predictions_dir = Path(params.output_directory) / "predictions"
+    logger.info(f"summarizing results in {predictions_dir}")
     result_summary.score_pdb_files_multiprocessing(
         input_directory=predictions_dir,
         output_file=Path(params.output_directory) / f"structure_scores.csv",
@@ -431,6 +439,7 @@ def create_summary_csv(params: params.Fragfold3Params):
         chain_groups=params.structure_score_params.chain_groups,
         distance_cutoff=params.structure_score_params.contact_distance_cutoff,
     )
+    logger.info(f"finished summarizing results in {predictions_dir}")
 
 
 def plot_results(params: params.Fragfold3Params):
@@ -478,11 +487,23 @@ def check_all_done(input_a3ms: list, predictions_dir: str | Path):
     return True
 
 
+def get_unfinished_a3m_files(input_a3ms: list, predictions_dir: str|Path):
+    """
+    for a list of a3m files, filter out the ones that are already done (presence of done flag in predictions_dir
+    """
+    unfinished_files = []
+    for a3m_file in input_a3ms:
+        done_flag_file = Path(predictions_dir) / f"{a3m_file.stem}.done.txt"
+        if not done_flag_file.exists():
+            unfinished_files.append(a3m_file)
+    return unfinished_files
+
+
 # @app.command()
 def fragfold3_pipeline(
     params: params.Fragfold3Params,
     root: str | Path | None = None,
-    clean_files: bool = True,
+    clean_files: bool = False,
 ):
     if root is not None:
         root = Path(root)
@@ -502,6 +523,12 @@ def fragfold3_pipeline(
             colabfold_data=params.colabfold_data,
             **params.extra_colabfold_params,
         )
+    if params.reference_pdb is not None:
+        if not Path(params.reference_pdb).exists():
+            logger.warning(f"reference pdb {params.reference_pdb} does not exist, skipping copy.")
+        else:
+            new_filename = f"{params.reference_pdb.stem}-reference_structure.pdb"
+            shutil.copy(params.reference_pdb, predictions_dir / new_filename)
     align_pdbs(params)
     create_summary_csv(params)
     if clean_files:
@@ -519,43 +546,56 @@ def fragfold3_pipeline_scheduler(
     job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
     root: str | Path | None = None,
     max_jobs_allowed=2,
-    clean_files: bool = True,
+    clean_files: bool = False,
     **job_submitter_kwargs,
 ):
     """distribute the individual predictions across any number of nodes using SLURM."""
     if root is not None:
         root = Path(root)
         params.convert_paths2abs(root=root)
+    logger.info("running setup")
     prepared_data = setup(params)
+    logger.info("finished setup")
     a3m_files = prepared_data["a3m_files"]
     af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
-    colab_cmds = get_colabfold_batch_commands(
-        a3m_files_or_directories=a3m_files,
-        output_dir=predictions_dir,
-        parameters=params,
-    )
+    logger.info("getting colabfold batch commands")
+    logger.info("finished getting colabfold batch commands")
     if check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir):
-        print("All jobs already done, skipping colabfold job submission.")
+        logger.info("All jobs already done, skipping colabfold job submission.")
+        all_done = True
     else:
+        unfinished_a3m_files = get_unfinished_a3m_files(input_a3ms=a3m_files, predictions_dir=predictions_dir)
+        colab_cmds = get_colabfold_batch_commands(
+            a3m_files_or_directories=unfinished_a3m_files,
+            output_dir=predictions_dir,
+            parameters=params,
+        )
         # submit the commands to the job scheduler
         job_submitter.watch_and_submit(colab_cmds, max_jobs_allowed=max_jobs_allowed, **job_submitter_kwargs)
-    # wait for all jobs to finish
-    all_done = False
+        all_done = False
     timeout_limit = 60 * 60 * 6  # 6 hours
     start_time = time.time()
     while not all_done:
         all_done = check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir)
         if not all_done:
-            print("Waiting for all jobs to finish...")
+            logger.info("Waiting for all jobs to finish...")
             time.sleep(5)
         if time.time() - start_time > timeout_limit:
-            print("Timeout reached. Exiting...")
+            logger.info("Timeout reached. Exiting...")
             break
+    if params.reference_pdb is not None:
+        if not Path(params.reference_pdb).exists():
+            logger.warning(f"reference pdb {params.reference_pdb} does not exist, skipping copy.")
+        else:
+            new_filename = f"{params.reference_pdb.stem}-reference_structure.pdb"
+            shutil.copy(params.reference_pdb, predictions_dir / new_filename)
     align_pdbs(params)
     create_summary_csv(params)
     if clean_files:
+        logger.info("cleaning up files")
         cleanup(params)
+        logger.info("finished cleaning up files")
     plot_results(params)
     main_output_dir = Path(params.output_directory)
     if root is not None:

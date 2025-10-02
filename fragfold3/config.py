@@ -7,6 +7,10 @@ import yaml
 import pandas as pd
 import os
 
+# Load environment variables from .env file if it exists
+load_dotenv()
+
+
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135
 try:
@@ -45,9 +49,6 @@ COLABFOLD_DATA = os.environ.get("COLABFOLD_DATA", EXECUTABLES["colabfold_data"])
 # CHIMERAX_EXECUTABLE = EXECUTABLES["chimerax"]
 # USALIGN_EXECUTABLE = EXECUTABLES["USalign"]
 
-
-# Load environment variables from .env file if it exists
-load_dotenv()
 
 # ==============================================================================
 # // main project paths

@@ -1,9 +1,10 @@
-from Bio.PDB import PDBParser, NeighborSearch, Superimposer, Select # type: ignore
+from Bio.PDB import PDBParser, NeighborSearch, Superimposer, Select  # type: ignore
 from Bio.Data import IUPACData
 from pathlib import Path
 import fragfold3.tools.pdb_tools as pdb_tools
 import json
 import re
+
 
 def is_interchain_contact(
     res_1,
@@ -35,14 +36,14 @@ def get_interchain_contacts(
     chain_group_a=None,
     chain_group_b=None,
 ):
-    '''
+    """
     This function adapted from original FragFold https://github.com/swanss/FragFold
-    '''
+    """
     ns = NeighborSearch([x for x in structure.get_atoms()])
     nearby_res = ns.search_all(contact_distance, "R")
     contacts = [
         (x, y)
-        for x, y in nearby_res # type: ignore
+        for x, y in nearby_res  # type: ignore
         if is_interchain_contact(x, y, chain_group_a, chain_group_b)
     ]
     return contacts
@@ -54,9 +55,9 @@ def get_interchain_contacts_from_pdb(
     chain_group_a: list[str] | None = None,
     chain_group_b: list[str] | None = None,
 ):
-    '''
+    """
     This function adapted from original FragFold https://github.com/swanss/FragFold
-    '''
+    """
     pdb_file = Path(pdb_file)
     parser = PDBParser(QUIET=True)
     s = parser.get_structure("s", pdb_file)
@@ -71,7 +72,7 @@ def get_interchain_contacts_from_pdb(
     return contacts
 
 
-class Residue():
+class Residue:
 
     def __init__(self, res):
         self.pos = res.id[1]
@@ -82,7 +83,7 @@ class Residue():
         return f"{self.chain}.{self.pos} {self.residue}"
 
 
-class Contact():
+class Contact:
 
     def __init__(self, res1, res2):
         self.res1 = Residue(res1)
@@ -96,7 +97,7 @@ class Contact():
         return f"{self.res1} - {self.res2}"
 
 
-class StructureContacts():
+class StructureContacts:
 
     def __init__(self, pdb_path, contact_distance=5, chain_group_a=None, chain_group_b=None):
         self.pdb_path = pdb_path
@@ -105,8 +106,47 @@ class StructureContacts():
         self.chain_group_a = chain_group_a
         self.chain_group_b = chain_group_b
         self.structure = self.parser.get_structure("s", pdb_path)
+        self.chains = [chain.id for chain in self.structure.get_chains()]
+        self.chain_seqs = self._structure2sequences()
         self.contacts = self._get_contacts()
+        self.contact_positions = self._get_contact_positions_per_chain()
 
+    def _structure2sequences(self):
+        sequences = {}
+        for model in self.structure:
+            for chain in model:
+                sequences[chain.id] = [[], ""]
+                for res in chain:
+                    sequences[chain.id][0].append(res.get_id()[1])
+                    resname = res.get_resname().capitalize()
+                    if resname in IUPACData.protein_letters_3to1:
+                        one_letter = IUPACData.protein_letters_3to1[resname]
+                    else:
+                        raise ValueError(f"Unknown residue name: {resname}")
+                    sequences[chain.id][1] += one_letter
+        return sequences
+
+    def get_sequence_with_gaps(self, chain_id):
+        seq_list, seq_str = self.chain_seqs[chain_id]
+        if len(seq_list) != len(seq_str):
+            raise ValueError(f"Sequence length mismatch for chain {chain_id}")
+        seq_with_gaps = []
+        last_pos = 0
+        for pos, aa in zip(seq_list, seq_str):
+            gap_length = pos - last_pos - 1
+            if gap_length > 0:
+                seq_with_gaps.append("-" * gap_length)
+            seq_with_gaps.append(aa)
+            last_pos = pos
+        return "".join(seq_with_gaps)
+
+    def _get_contact_positions_per_chain(self):
+        contacts_per_chain = {}
+        for chain_id in self.chains:
+            contacts_per_chain[chain_id] = sorted(
+                list(set([c.bychain[chain_id].pos for c in self.get_contacts_by_chain(chain_id)]))
+            )
+        return contacts_per_chain
 
     def _get_contacts(self):
         """Get contacts between residues in the structure."""
@@ -117,7 +157,7 @@ class StructureContacts():
             chain_group_b=self.chain_group_b,
         )
         return [Contact(i[0], i[1]) for i in _contacts]
-    
+
     def get_contacts_by_chain(self, chain):
         """Get contacts for a specific chain."""
         contacts_by_chain = []

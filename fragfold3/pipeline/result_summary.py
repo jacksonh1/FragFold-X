@@ -37,7 +37,7 @@ output:
 #     int(m.group("rank")),
 # )
 
-
+import os
 import pandas as pd
 from pathlib import Path
 import fragfold3.config as config
@@ -79,7 +79,7 @@ def score_pdb_files(
     res = []
     for p in tqdm.tqdm(list(input_directory.rglob("*.pdb"))):
         temp = parse_pdb_filename(p, regex)
-        temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2) + 1  # type: ignore
+        temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2)# + 1  # type: ignore
         d = weighted_contacts.calculate_weighted_contacts(p)
         temp.update(d)
         temp["pdb_file"] = str(p.resolve())
@@ -104,7 +104,7 @@ def score_pdb(
 ):
     pdb_file = Path(pdb_file)
     temp = parse_pdb_filename(pdb_file, regex)
-    temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2) + 1 # type: ignore
+    temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2)# + 1 # type: ignore
     d = weighted_contacts.calculate_weighted_contacts(pdb_file, distance_cutoff=distance_cutoff, **kwargs)
     temp.update(d)
     temp["pdb_file"] = str(pdb_file.resolve())
@@ -129,6 +129,16 @@ def score_pdb(
     return temp
 
 
+
+def get_cpu_count():
+    # Try to respect SLURM allocations
+    if "SLURM_NTASKS" in os.environ:
+        return int(os.environ["SLURM_NTASKS"])
+    else:
+        # Fallback to all CPUs on the node
+        return multiprocessing.cpu_count()
+
+
 def score_pdb_files_multiprocessing(
     input_directory: Path | str,
     output_file: Path | str | None = None,
@@ -149,7 +159,7 @@ def score_pdb_files_multiprocessing(
         logger.warning(f"No pdb files found in {input_directory}")
         return
     if n_processes is None:
-        n_processes = multiprocessing.cpu_count()
+        n_processes = get_cpu_count()
     logger.info(f"Using {n_processes} processes")
     with multiprocessing.Pool(n_processes) as p:
         results_iterator = p.imap_unordered(
