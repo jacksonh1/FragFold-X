@@ -41,17 +41,17 @@ class StructureScoreParameters:
     chain_group_a: list[str] | None = field(default=None)
     chain_group_b: list[str] | None = field(default=None)
     # pdb_filename_regex: str | Path = field(default=config.PDB_FILENAME_REGEX)
-    chain_groups: list[list[str]] | None = field(init=False, default=None)
+    # chain_groups: list[list[str]] | None = field(init=False, default=None)
     n_processes: int | None = field(default=None)
 
     def __attrs_post_init__(self):
         chain_groups = [self.chain_group_a, self.chain_group_b]
         if any(chain_groups) and not all(chain_groups):
             raise ValueError("If one chain group is defined, both must be defined.")
-        if chain_groups[0] is None and chain_groups[1] is None:
-            self.chain_groups = None
-        else:
-            self.chain_groups = chain_groups
+        # if chain_groups[0] is None and chain_groups[1] is None:
+        #     self.chain_groups = None
+        # else:
+        #     self.chain_groups = chain_groups
 
 
 @define

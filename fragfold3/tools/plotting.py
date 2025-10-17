@@ -10,8 +10,8 @@ import logomaker as lm
 import plotly.subplots as sp
 import plotly.graph_objs as go
 from Bio import PDB
-import py3Dmol
 import tempfile
+import py3Dmol
 import os
 import fragfold3.tools.pdb_tools as pdb_tools
 

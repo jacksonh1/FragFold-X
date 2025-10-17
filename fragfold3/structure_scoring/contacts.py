@@ -99,7 +99,13 @@ class Contact:
 
 class StructureContacts:
 
-    def __init__(self, pdb_path, contact_distance=5, chain_group_a=None, chain_group_b=None):
+    def __init__(
+        self,
+        pdb_path: Path | str,
+        contact_distance: float = 5,
+        chain_group_a: list[str] | None = None,
+        chain_group_b: list[str] | None = None,
+    ):
         self.pdb_path = pdb_path
         self.contact_distance = contact_distance
         self.parser = PDBParser(QUIET=True)

@@ -6,6 +6,8 @@ import matplotlib.colors as mcolors
 import pymol
 from pymol import cmd
 
+pymol.finish_launching(['pymol', '-cq'])  # Quiet, no GUI
+
 def align_pdbs(input_pdb_files, output_dir):
     """
     Parameters
@@ -29,7 +31,7 @@ def align_pdbs(input_pdb_files, output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    pymol.finish_launching(['pymol', '-cq'])  # Quiet, no GUI
+    cmd.reinitialize()
 
     ref_name = "ref"
     input_pdb_files = [Path(f) for f in input_pdb_files]
@@ -48,7 +50,7 @@ def align_pdbs(input_pdb_files, output_dir):
         cmd.delete(obj_name)
 
     cmd.delete("all")
-    pymol.cmd.quit()
+    # cmd.quit()
 
 def align_pdbs_in_dir_and_overwrite(input_dir):
     """
@@ -72,6 +74,7 @@ def align_pdbs_in_dir_and_overwrite(input_dir):
 def color_residues_pymol(df, pdb_file, chain='B', colormap='magma', session_name=None, vmax=None, vmin=None):
     """
     Color residues in PyMOL based on residue-value mapping for a specific chain
+    df must have columns 'resi' and 'value' for residue number and value to color by
     """
     cmd.reinitialize()
     cmd.load(pdb_file)

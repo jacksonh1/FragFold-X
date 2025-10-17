@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 from Bio.SeqUtils import seq1
 from Bio.Data import IUPACData
+from Bio import PDB
+import tempfile
 
 def contacts_to_strings(contacts):
     '''
@@ -79,6 +81,7 @@ def extract_sequences_from_pdb(input_file):
         sequences[chain_id] = str(pp.get_sequence())
     return sequences
 
+
 def extract_chain_sequence_from_coords(input_file, chain_id='B'):
     file_extension = os.path.splitext(input_file)[1].lower()
     if file_extension == '.pdb':
@@ -110,6 +113,7 @@ def _extract_chain_sequence_from_seqres_pdb(pdb_file, chain_id='A'):
     if sequence == "":
         raise ValueError(f"Chain {chain_id} not found in {pdb_file}")
     return sequence
+
 
 def _extract_chain_sequence_from_seqres_cif(cif_file, chain_id='A'):
     cif_sequences = {}
@@ -189,3 +193,16 @@ def check_residue_numbering_with_pdb(pdb_file, residue, number, chain_id):
                         else:
                             raise ValueError(f"Residue mismatch: expected {residue} ({number}), found {one_letter} ({res.get_id()[1]})")
     raise ValueError(f"Residue {residue} with number {number} not found in chain {chain_id} of the PDB file.")
+
+
+def biopython_Structure_to_string(structure):
+    """Convert a Biopython Structure object to a PDB string."""
+    io = PDB.PDBIO()
+    io.set_structure(structure)
+    temp_file = tempfile.NamedTemporaryFile(mode="w", delete=False)
+    io.save(temp_file.name)
+    temp_file.close()
+    with open(temp_file.name, "r") as f:
+        pdb_string = f.read()
+    os.remove(temp_file.name)  # Clean up the temporary file
+    return pdb_string

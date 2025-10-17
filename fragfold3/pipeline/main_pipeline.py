@@ -436,7 +436,8 @@ def create_summary_csv(params: params.Fragfold3Params):
         input_directory=predictions_dir,
         output_file=Path(params.output_directory) / f"structure_scores.csv",
         n_processes=params.structure_score_params.n_processes,
-        chain_groups=params.structure_score_params.chain_groups,
+        chain_group_a=params.structure_score_params.chain_group_a,
+        chain_group_b=params.structure_score_params.chain_group_b,
         distance_cutoff=params.structure_score_params.contact_distance_cutoff,
     )
     logger.info(f"finished summarizing results in {predictions_dir}")
