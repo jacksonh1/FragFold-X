@@ -5,3 +5,5 @@
 --error=logs/fragfold_%A_%a.err
 --gres=gpu:1
 --mem=20000
+"--nice": 1500
+    "--nodelist": "node[3500,3619-3620]"

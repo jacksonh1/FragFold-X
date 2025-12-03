@@ -1,7 +1,62 @@
 import re
+import os
+from typing import Literal
 import json
 from pathlib import Path
-from fragfold3 import config
+import subprocess
+import fragfold3.config as env
+
+
+def colabfold_batch_wrapper(
+    input_file_or_directory: str | Path,
+    output_dir: str | Path,
+    weights: Literal[
+        "alphafold2",
+        "alphafold2_ptm",
+        "alphafold2_multimer_v1",
+        "alphafold2_multimer_v2",
+        "alphafold2_multimer_v3",
+        "deepfold_v1",
+    ] = "alphafold2_ptm",
+    pairmode: Literal[
+        "unpaired",
+        "paired",
+        "unpaired_paired",
+    ] = "unpaired",
+    colabfold_executable: str | Path = env.COLABFOLD_BATCH,
+    colabfold_data: str | Path = env.COLABFOLD_DATA,
+    extra_args: str | Path = "",
+    run = True,
+    # gpu_number: int = 0,
+) -> str:
+    # subprocess.run(
+    #     "AVAILABLE_GPU=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader | sort -n -k2 | head -n1 | cut -d, -f1)",
+    #     shell=True,
+    #     check=True,
+    # )
+    # subprocess.run("export CUDA_VISIBLE_DEVICES=$AVAILABLE_GPU", shell=True, check=True)
+    # subprocess.run(f"export CUDA_VISIBLE_DEVICES={gpu_number}", shell=True, check=True)
+    # colab_command = f"{colabfold_executable} --model-type alphafold2_ptm --amber --num-relax 5 --use-gpu-relax --data '{colabfold_data}' --pair-mode unpaired {input_file_or_directory} {output_dir}"
+    # colab_command = f"export CUDA_VISIBLE_DEVICES={gpu_number}; {colabfold_executable} --model-type {weights} --data '{colabfold_data}' --pair-mode {pairmode} {extra_args} {input_file_or_directory} {output_dir}"
+    colab_command = f"{colabfold_executable} --model-type {weights} --data '{colabfold_data}' --pair-mode {pairmode} {extra_args} '{input_file_or_directory}' '{output_dir}'"
+    if run:
+        subprocess.run(colab_command, shell=True, check=True)
+        return colab_command
+    else:
+        return colab_command
+
+
+def colabfold_batch_MSA_wrapper(
+    input_file: str | Path,
+    output_dir: str | Path,
+    colabfold_executable: str = env.COLABFOLD_BATCH,
+    colabfold_data: str = env.COLABFOLD_DATA,
+):
+    # subprocess.run("export MPLBACKEND=Agg", shell=True, check=True)
+    os.environ["JAX_PLATFORMS"] = "cpu"
+    colab_command = f'{colabfold_executable} --msa-only --data "{colabfold_data}" --msa-only "{input_file}" "{output_dir}"'
+    subprocess.run(colab_command, shell=True, check=True)
+
 
 
 def get_colabfold_scores(pdb_file: str | Path):
@@ -40,7 +95,7 @@ def parse_rank_from_pdb_filename(
     return int(rank)
 
 
-def parse_pdb_filename_general(pdb_filename, pattern=config.COLABFOLD_PDB_PREDICTION_FILENAME_REGEX):
+def parse_pdb_filename_general(pdb_filename, pattern=env.COLABFOLD_PDB_PREDICTION_FILENAME_REGEX):
     """
     extracts the rank, filename and weights from the name of the `pdb_file` using the provided regex pattern.
 

@@ -1,12 +1,39 @@
 from pathlib import Path
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-
+import contextlib
+import os
+import sys
 
 import pymol
 from pymol import cmd
 
-pymol.finish_launching(['pymol', '-cq'])  # Quiet, no GUI
+
+@contextlib.contextmanager
+def suppress_pymol_output():
+    """Temporarily silence PyMOL's C-level stdout/stderr chatter."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    with open(os.devnull, "w") as devnull:
+        old_stdout_fd = os.dup(sys.stdout.fileno())
+        old_stderr_fd = os.dup(sys.stderr.fileno())
+        try:
+            os.dup2(devnull.fileno(), sys.stdout.fileno())
+            os.dup2(devnull.fileno(), sys.stderr.fileno())
+            with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+                yield
+        finally:
+            os.dup2(old_stdout_fd, sys.stdout.fileno())
+            os.dup2(old_stderr_fd, sys.stderr.fileno())
+            os.close(old_stdout_fd)
+            os.close(old_stderr_fd)
+
+
+with suppress_pymol_output():
+    pymol.finish_launching(['pymol', '-cq'])  # Quiet, no GUI
+    cmd.feedback("disable", "all", "actions results details warnings errors")
+
+
 
 def align_pdbs(input_pdb_files, output_dir):
     """

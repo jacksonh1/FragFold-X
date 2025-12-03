@@ -15,9 +15,9 @@ some of the code here I have written for other projects over the years and adapt
 This is essentially a reimplementation of FragFold, but with a few improvements and rewritten source code. The main improvements are:
 - ability to use multiple domains as the "receptor" for fragment binding
 - different ways to generate fragments (e.g. generate a fragment every N residues rather than every single residue, or split a protein into fragments which overlap by N residues)
-- completely refactored codebase with a more modular design
+- completely refactored codebase that you may or may not find easier to use
 
-The original FragFold pipeline is recreated here, however the main utility of this code over the original is its flexibility. The [a3mcat](https://github.com/jacksonh1/a3mcat) tool allows you to generate custom inputs for alphafold predictions programmatically using python. The `fragfold3` module contains wrappers for running colabfold predictions from within python, as well as utilities for scoring predicted peptide-domain structures. So you can generate custom inputs for structure prediction, execute those predictions, and analyze the resulting structures all from within python (even in a single script if you want). This is useful for large scale protein structure prediction tasks where you want to generate inputs and run predictions in a single pipeline.
+The original FragFold pipeline is recreated here. The main benefit of this code over the original is flexibility. The [a3mcat](https://github.com/jacksonh1/a3mcat) tool allows you to generate custom inputs for alphafold predictions programmatically using python. The `fragfold3` module contains wrappers for running colabfold predictions from within python, as well as utilities for scoring predicted peptide-domain structures. So you can generate custom inputs for structure prediction, execute those predictions, and analyze the resulting structures all from within python (even in a single script if you want). This is useful for large scale protein structure prediction tasks where you want to generate inputs and run predictions in a single pipeline.
 
 ## upcoming features:
 - [ ] add more scoring functions
@@ -54,10 +54,10 @@ make create_environment
 - see [Configuring External Executable Paths](#configuring-external-executable-paths) section below for details on how to set up paths to the colabfold executables.
 
 
-#### Configuring External Executable Paths
+### Configuring External Executable Paths
 You can configure the paths to the colabfold installed locally on your machine in two ways:
 
-##### 1. Using `executables.yaml`
+#### 1. Using `executables.yaml`
 
 - The file `./fragfold3/executables.yaml` contains the default paths to required executables.
 - After cloning the repository, you can edit this file to set the correct paths for your system.
@@ -68,7 +68,7 @@ You can configure the paths to the colabfold installed locally on your machine i
   ```
 - the paths specified in this file will be used by default when running FragFold3 as long as fragfold3 is installed in editable mode (i.e. using `pip install -e .` or `make create_environment` as shown above).
 
-##### 2. Using Environment Variables
+#### 2. Using Environment Variables
 - You can override the paths in `executables.yaml` by setting environment variables before running FragFold3.
 - Supported variables:
     - `COLABFOLD_BATCH`: Path to the ColabFold batch executable
@@ -78,12 +78,17 @@ You can configure the paths to the colabfold installed locally on your machine i
   ```bash
   export COLABFOLD_BATCH=/custom/path/to/colabfold_batch
   export COLABFOLD_DATA=/custom/path/to/colabfold_data
-  run_fragfold3 --input_params config.yaml
+  fragfold3 --input_params config.yaml
   ```
 You can set these environment variables in your shell profile (e.g., `.bashrc`, `.zshrc`, `.zshenv`, etc.) for persistent configuration if you want
+for example:
+```bash
+echo 'export COLABFOLD_BATCH=/custom/path/to/colabfold_batch' >> ~/.bashrc
+echo 'export COLABFOLD_DATA=/custom/path/to/colabfold_data' >> ~/.bashrc
+```
 
 
-## Usage - command line
+## Usage
 
 ### TL;DR
 
@@ -112,27 +117,58 @@ The `fragfold3` command will be available in your path automatically after insta
 python "./fragfold3/scripts/run_fragfold3.py" --input_params path/to/config.yaml
 ```
 
+Alternatively, you can use FragFold3 as a Python module in your own scripts:
+
+```python
+import fragfold3
+parameters = fragfold3.load_config("path/to/config.yaml")
+fragfold3.fragfold3_pipeline(parameters)
+```
+
+
 ### distributing colabfold predictions with a job manager
 Currently the only supported job manager is SLURM.
 
-[explain sbatch parameters file]
-
-[explain where in the source code you could add support for other job managers]
-
-[explain generally how it works]
+The colabfold predictions can be distributed using a job manager by specifying the `--colabfold_scheduler` argument when running fragfold3. For example, to use SLURM:
 
 ```bash
+fragfold3 --input_params path/to/config.yaml --colabfold_scheduler slurm
 ```
+
+The colabfold predictions will be submitted as separate jobs to the SLURM job scheduler using the `sbatch` command. The script works by monitoring the number of running jobs and submitting new jobs as others finish, until all predictions are complete. As such, you probably also want to run the fragfold3 command itself as a job in SLURM, so that it can continue monitoring until all predictions are complete. This can be done using a simple sbatch script like that used in example 2 (`./examples/example2_slurm/run_example2.sh`).
+
+Before running, make sure to configure the sbatch parameters to match your system and requirements. You can do this in one of three ways:
+1. **Using the default sbatch parameters file**: If you do not provide a custom sbatch parameters file, fragfold3 will use the default sbatch parameters file located at `fragfold3/job_schedulers/default_colabfold_sbatch_params.json`. You can modify this file directly if you installed fragfold3 in editable mode and it will use your modified version.
+2. **Using the FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE environment variable**: You can set the environment variable `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` to point to your custom sbatch parameters file. This way, every time you run fragfold3 with the `--colabfold_scheduler slurm` option, it will use your custom default sbatch parameters file.
+3. **Using a custom sbatch parameters file as a cli input**: You can create your own sbatch parameters file and provide it using the `--colabfold_sbatch_param_file` argument when running fragfold3.
+
+Parameter precedence:
+- if `--colabfold_sbatch_param_file` is provided as a cli argument, it takes precedence over the environment variable and the default file
+- if the environment variable `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` is set, it takes precedence over the default file
+parameters are not merged - only one source is used based on the precedence above
+
+sbatch parameter file format:
+The sbatch parameters file for colabfold jobs (options 1-3 above) should be in a json file format. As an example, here is the default file located in `fragfold3/job_schedulers/default_colabfold_sbatch_params.json`
+```json
+{
+    "--job-name": "colabfold",
+    "-c": 5,
+    "--partition": "pi_keating",
+    "--output": "logs/colabfold_%A_%a.out",
+    "--error": "logs/colabfold_%A_%a.err",
+    "--gres": "gpu:l40s:1",
+    "--mem": 20000
+}
+```
+
+
 
 alternatives or other ways to parallelize:
 - use `fragfold3` to generate many parameter files, then run them in parallel using a job manager
-- generate many parameter files
 - general note - colabfold inference uses basically 100 % of a GPU's processing power, so running multiple jobs in parallel on a single GPU is not really beneficial and will use more GPU memory. However, you can run multiple jobs in parallel on multiple GPUs.
-- use the `fragfold3.main_pipeline....` function to generate a list of colabfold commands that need to be run, then run them in parallel using a job manager or other parallelization method.
 
 
-
-## Input Configuration (YAML Parameters)
+## Configuration (YAML Parameters)
 
 The input YAML file defines all parameters needed for a FragFold3 run. Below is a complete example with explanations:
 
@@ -142,7 +178,7 @@ The input YAML file defines all parameters needed for a FragFold3 run. Below is 
 ### Parameter Descriptions
 
 
-### Output Structure
+## Output
 
 FragFold3 generates the following output structure:
 ```
@@ -156,26 +192,51 @@ output_directory/
     └── *.json
 ```
 
-## Usage - Python module
-Alternatively, you can use FragFold3 as a Python module in your own scripts:
 
-```python
-import fragfold3
-parameters = fragfold3.load_config("path/to/config.yaml")
-fragfold3.fragfold3_pipeline(parameters)
-```
+## custom applications
+The fragfold3 pipeline boils down to a couple of very basic steps: 
+- downloading a3m files from colabfold mmSEQS server
+- manipulation of the msas to generate custom inputs for structure prediction (i.e. slicing out fragment msas and combining them with receptor msas)
+  - uses the `a3mcat` tool that I created for this purpose (see [a3mcat documentation](https://github.com/jacksonh1/a3mcat))
+- running colabfold structure predictions on those inputs
+- scoring the resulting structures using various scoring functions
 
-### custom applications
-To generate custom a3m inputs for structure prediction, you can use the `a3mcat` tool (see [a3mcat documentation](https://github.com/jacksonh1/a3mcat))
+
+You can use the tools in fragfold3 to perform the same steps for your own custom applications if you want.
+
+### basic example
 
 To download MSAs from the colabfold mmSEQS server:
 ```python
-from fragfold3 import ...
+from fragfold3 import colabfold_tools
+colabfold_tools.colabfold_batch_MSA_wrapper(
+    input_file="input_sequence.fasta",
+    output_dir="MSA_directory/",
+)
+```
+
+see [a3mcat documentation](https://github.com/jacksonh1/a3mcat) for manipulating a3m files. Here's a very basic example:
+```python
+import a3mcat
+msa = a3mcat.MSAa3m.from_a3m_file("MSA_directory/input_sequence.a3m") 
+# whatever msa you downloaded in previous step (it should be named after the header in the fasta file)
+
+# modify msa as desired using a3mcat functions
+receptor_msa = a3mcat.MSAa3m.from_a3m_file("MSA_directory/receptor_msa.a3m")
+fragment_msa = msa[0:100]  # first 100 residues as fragment
+combined_msa = receptor_msa + fragment_msa  # concatenate receptor and fragment msas
+combined_msa.save("combined_msa.a3m")
 ```
 
 to run structure predictions using ColabFold:
 ```python
-from fragfold3 import ...
+from fragfold3 import colabfold_tools
+colabfold_tools.colabfold_batch_wrapper(
+    input_file_or_directory="combined_msa.a3m",
+    output_dir="path/to/predictions/",
+    weights="alphafold2_ptm",
+    pairmode="unpaired",
+)
 ```
 
 ## Project Organization

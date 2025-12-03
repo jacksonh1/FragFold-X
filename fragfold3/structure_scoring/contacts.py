@@ -30,25 +30,6 @@ def is_interchain_contact(
     return False
 
 
-def get_interchain_contacts(
-    structure,
-    contact_distance=4.0,
-    chain_group_a=None,
-    chain_group_b=None,
-):
-    """
-    This function adapted from original FragFold https://github.com/swanss/FragFold
-    """
-    ns = NeighborSearch([x for x in structure.get_atoms()])
-    nearby_res = ns.search_all(contact_distance, "R")
-    contacts = [
-        (x, y)
-        for x, y in nearby_res  # type: ignore
-        if is_interchain_contact(x, y, chain_group_a, chain_group_b)
-    ]
-    return contacts
-
-
 def get_interchain_contacts_from_pdb(
     pdb_file: str | Path,
     distance_cutoff: float | int = 4.0,
@@ -71,6 +52,33 @@ def get_interchain_contacts_from_pdb(
     )
     return contacts
 
+
+def get_interchain_contacts(
+    structure,
+    contact_distance=4.0,
+    chain_group_a=None,
+    chain_group_b=None,
+):
+    """
+    This function adapted from original FragFold https://github.com/swanss/FragFold
+    """
+    ns = NeighborSearch([x for x in structure.get_atoms()])
+    nearby_res = ns.search_all(contact_distance, "R")
+    contacts = [
+        (x, y)
+        for x, y in nearby_res  # type: ignore
+        if is_interchain_contact(x, y, chain_group_a, chain_group_b)
+    ]
+    return contacts
+
+
+
+from Bio.PDB import PDBParser, NeighborSearch, Superimposer, Select  # type: ignore
+from Bio.Data import IUPACData
+from pathlib import Path
+import fragfold3.tools.pdb_tools as pdb_tools
+import json
+import re
 
 class Residue:
 
@@ -133,6 +141,10 @@ class StructureContacts:
         return sequences
 
     def get_sequence_with_gaps(self, chain_id):
+        '''
+        Get the sequence of a chain including gaps based on residue positions. 
+        gaps should be where residues are missing from the structure.
+        '''
         seq_list, seq_str = self.chain_seqs[chain_id]
         if len(seq_list) != len(seq_str):
             raise ValueError(f"Sequence length mismatch for chain {chain_id}")

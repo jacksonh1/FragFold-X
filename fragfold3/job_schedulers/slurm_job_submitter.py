@@ -6,12 +6,9 @@ from functools import partial
 import json
 import re
 from loguru import logger
+import fragfold3.config as config
+
 # from loguru import Logger
-
-COLABFOLD_SBATCH_PARAM_FILE = os.path.join(
-    os.path.dirname(__file__), "colabfold_sbatch_params.json"
-)
-
 
 
 class SlurmJobSubmitter:
@@ -19,11 +16,16 @@ class SlurmJobSubmitter:
     A class to handle Slurm job submission with sbatch parameters.
     """
 
-    def __init__(self, sbatch_param_file: str | None = None, extra_sbatch_params: dict | None = None, logger = logger):
+    def __init__(
+        self,
+        sbatch_param_file: str | None = None,
+        extra_sbatch_params: dict | None = None,
+        logger=logger,
+    ):
         """
         Initializes the SlurmJobSubmitter with optional sbatch parameters from a file or a string.
         extra_sbatch_params overwrite the sbatch parameters from the file if a specific sbatch parameter is present in both.
-        i.e. if sbatch_param_file contains `--time=1:00:00` and extra_sbatch_params contains `--time=2:00:00`, the final sbatch parameters will be `--time=2:00:00`.
+        i.e. if sbatch_param_file contains "--time":"1:00:00" and extra_sbatch_params contains "--time":"2:00:00", the final sbatch parameters will be "--time":"2:00:00".
         """
         self.sbatch_param_file = sbatch_param_file
         self.extra_sbatch_params = extra_sbatch_params
@@ -39,7 +41,7 @@ class SlurmJobSubmitter:
         if not os.path.exists(self.sbatch_param_file):
             raise FileNotFoundError(f"File {self.sbatch_param_file} does not exist.")
         with open(self.sbatch_param_file, "r") as f:
-            sbatch_params = json.load(f)    
+            sbatch_params = json.load(f)
         return sbatch_params
 
     def _combine_sbatch_params(self) -> dict:
@@ -52,13 +54,13 @@ class SlurmJobSubmitter:
         if self.extra_sbatch_params is not None:
             params.update(self.extra_sbatch_params)
         return params
-        
+
     def _create_sbatch_param_str(self) -> str:
         par_list = []
         for k, v in self.sbatch_params.items():
             if k.startswith("--"):
                 par_list.append(f"{k}={v}")
-            elif k[0]=='-':
+            elif k[0] == "-":
                 par_list.append(f"{k} {v}")
         return " ".join(par_list)
 
@@ -73,13 +75,15 @@ class SlurmJobSubmitter:
             subprocess.run(full_command, shell=True, check=True)
             return full_command
         return full_command
-    
+
     def count_jobs(self, count_only_job_name: bool = True) -> int:
         if count_only_job_name:
             if "--job-name" in self.sbatch_params:
                 job_name_filter = self.sbatch_params["--job-name"]
             else:
-                raise ValueError("No job name provided in sbatch parameters so cannot count jobs with `count_only_job_name=True`.")
+                raise ValueError(
+                    "No job name provided in sbatch parameters so cannot count jobs with `count_only_job_name=True`."
+                )
         else:
             job_name_filter = None
         squeue_cmd = [
@@ -144,8 +148,7 @@ class SlurmJobSubmitter:
 
 
 colabfold_sbatch_submitter = SlurmJobSubmitter(
-    sbatch_param_file=COLABFOLD_SBATCH_PARAM_FILE,
-    logger=logger
+    sbatch_param_file=config.COLABFOLD_SBATCH_PARAM_FILE, logger=logger
 )
 # print(colabfold_sbatch_submitter._create_sbatch_param_str())
 # def read_sbatch_param_file_txt(sbatch_param_file: str) -> str:
@@ -167,7 +170,7 @@ colabfold_sbatch_submitter = SlurmJobSubmitter(
 #     if not os.path.exists(sbatch_param_file):
 #         raise FileNotFoundError(f"File {sbatch_param_file} does not exist.")
 #     with open(sbatch_param_file, "r") as f:
-#         sbatch_params = json.load(f)    
+#         sbatch_params = json.load(f)
 #     return sbatch_params
 
 # def submit_sbatch_command(
@@ -292,7 +295,6 @@ colabfold_sbatch_submitter = SlurmJobSubmitter(
 #     sbatch_param_file=COLABFOLD_SBATCH_PARAM_FILE,
 #     run=True,
 # )
-
 
 
 # print(

@@ -1,13 +1,16 @@
 import os
+from Bio.PDB import PDBIO # type: ignore
+from IPython.display import display
 from Bio.PDB import PDBParser, MMCIFParser, PPBuilder # type: ignore
 from Bio.SeqIO.PdbIO import CifSeqresIterator
-from Bio.PDB import PDBParser # type: ignore
 from pathlib import Path
 import numpy as np
 from Bio.SeqUtils import seq1
 from Bio.Data import IUPACData
 from Bio import PDB
 import tempfile
+import py3Dmol
+from io import StringIO
 
 def contacts_to_strings(contacts):
     '''
@@ -206,3 +209,40 @@ def biopython_Structure_to_string(structure):
         pdb_string = f.read()
     os.remove(temp_file.name)  # Clean up the temporary file
     return pdb_string
+
+
+def show_structure_with_py3Dmol(structure, style="cartoon"):
+    """
+    Displays a Biopython Structure object using py3Dmol in a Jupyter environment.
+    """
+    # Write structure to a PDB string
+    pdb_buf = StringIO()
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(pdb_buf)
+    pdb_str = pdb_buf.getvalue()
+
+    # Visualize with py3Dmol
+    view = py3Dmol.view(width=600, height=400)
+    view.addModel(pdb_str, "pdb")
+    view.setStyle({}, {style: {"colorscheme": "chain"}})
+    view.zoomTo()
+    display(view)
+
+
+def show_pdb_file_with_py3Dmol(pdb_file, style="cartoon"):
+    """
+    Displays a PDB file using py3Dmol in a Jupyter environment.
+    
+    Parameters:
+    - pdb_file: Path to the PDB file
+    - style: Visualization style (default: "cartoon")
+    """
+    with open(pdb_file, 'r') as f:
+        pdb_str = f.read()
+    
+    view = py3Dmol.view(width=600, height=400)
+    view.addModel(pdb_str, "pdb")
+    view.setStyle({}, {style: {"colorscheme": "chain"}})
+    view.zoomTo()
+    display(view)

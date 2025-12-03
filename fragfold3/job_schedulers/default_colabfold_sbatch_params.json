@@ -4,6 +4,6 @@
     "--partition": "pi_keating",
     "--output": "logs/colabfold_%A_%a.out",
     "--error": "logs/colabfold_%A_%a.err",
-    "--gres": "gpu:1",
+    "--gres": "gpu:l40s:1",
     "--mem": 20000
 }

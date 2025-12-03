@@ -1,4 +1,3 @@
-import fragfold3.tools.pssms as pssms
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -6,7 +5,6 @@ plt.style.use("fragfold3.local_data.fragfold3_plotstyle")
 import matplotlib.pyplot as plt
 import matplotlib.axes
 import seaborn as sns
-import logomaker as lm
 import plotly.subplots as sp
 import plotly.graph_objs as go
 from Bio import PDB
@@ -41,25 +39,6 @@ def _format_bar_plot(ax, xlabel_sequence: str):
         labels=list(xlabel_sequence),
     )
     ax.set_xlim(-0.5, len(xlabel_sequence) - 0.5)
-    return ax
-
-
-def plot_logo(ax, str_list, tick_label_str):
-    counts = pssms.alignment_2_counts(str_list)
-    lm.Logo(counts, color_scheme="chemistry", ax=ax)
-    ax.set_ylim(0, len(str_list))
-    _ = ax.set_xticks(
-        list(range(len(str_list[0]))),
-        labels=list(tick_label_str),
-    )
-    return ax
-
-
-def format_logo_xticks_with_str(ax, tick_label_str):
-    _ = ax.set_xticks(
-        list(range(len(tick_label_str))),
-        labels=list(tick_label_str),
-    )
     return ax
 
 

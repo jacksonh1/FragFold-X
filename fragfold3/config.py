@@ -49,6 +49,16 @@ COLABFOLD_DATA = os.environ.get("COLABFOLD_DATA", EXECUTABLES["colabfold_data"])
 # CHIMERAX_EXECUTABLE = EXECUTABLES["chimerax"]
 # USALIGN_EXECUTABLE = EXECUTABLES["USalign"]
 
+# ==============================================================================
+# // colabfold sbatch parameters file
+# ==============================================================================
+_COLABFOLD_SBATCH_PARAM_FILE = os.path.join(
+    os.path.dirname(__file__), "job_schedulers/default_colabfold_sbatch_params.json"
+)
+COLABFOLD_SBATCH_PARAM_FILE = os.environ.get(
+    "FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE", _COLABFOLD_SBATCH_PARAM_FILE
+)
+
 
 # ==============================================================================
 # // main project paths
@@ -67,8 +77,8 @@ MSA_CACHE_DIR = DATA_DIR / "MSAs/colabfold_mmseqs"  # directory for storing MSA 
 # // other environment variables
 # ==============================================================================
 
-COLABFOLD_PDB_PREDICTION_FILENAME_REGEX = r"(?P<name>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb"
-PDB_FILENAME_REGEX = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb"
+COLABFOLD_PDB_PREDICTION_FILENAME_REGEX = r'(?P<name>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb'
+PDB_FILENAME_REGEX = r'(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb'
 
 
 # version

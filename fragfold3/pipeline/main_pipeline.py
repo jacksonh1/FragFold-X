@@ -22,12 +22,8 @@ import os
 import fragfold3.tools.plotting as plotting
 import matplotlib.pyplot as plt
 import fragfold3.pipeline.parameters as params
-import fragfold3.tools.cli_wrappers as cli_wrappers
-from typing import Literal, Callable
-from functools import partial
-import multiprocessing
+import fragfold3.tools.colabfold_tools as colabfold_tools
 import fragfold3.tools.sequence_utils as seq_utils
-from Bio import Align, AlignIO, Seq, SeqIO
 import fragfold3.job_schedulers.slurm_job_submitter as slurm_job_submitter
 import fragfold3.tools.pymol_utils as pymol_utils
 import fragfold3.pipeline.result_summary as result_summary
@@ -102,7 +98,7 @@ def get_colabfold_msa(
     if not msa_file.exists():
         # Generate MSA using colabfold or any other method
         # This is a placeholder for the actual MSA generation logic
-        cli_wrappers.colabfold_batch_MSA_wrapper(
+        colabfold_tools.colabfold_batch_MSA_wrapper(
             input_file=fasta_file,
             output_dir=msa_cache_dir,
             **kwargs,  # pass any additional arguments needed for MSA generation
@@ -122,7 +118,7 @@ def run_colabfold_batch(
     a3m_input_dir: str | Path, output_dir: str | Path, weights: str, **kwargs
 ):
     a3m_input_dir = Path(a3m_input_dir)
-    cli_wrappers.colabfold_batch_wrapper(
+    colabfold_tools.colabfold_batch_wrapper(
         input_file_or_directory=a3m_input_dir,
         output_dir=output_dir,
         weights=weights,  # type: ignore
@@ -135,7 +131,7 @@ def run_colabfold_batch(
     #             f"Skipping {input_file} as {done_file} already exists. Remove it to rerun."
     #         )
     #         continue
-    #     cli_wrappers.colabfold_batch_wrapper(
+    #     colabfold_tools.colabfold_batch_wrapper(
     #         input_file_or_directory=input_file,
     #         output_dir=output_dir,
     #         weights=weights,  # type: ignore
@@ -159,7 +155,7 @@ def get_colabfold_batch_commands(
             "colabfold_data": parameters.colabfold_data,
         }
         param_dict.update(parameters.extra_colabfold_params)
-        command = cli_wrappers.colabfold_batch_wrapper(
+        command = colabfold_tools.colabfold_batch_wrapper(
             **param_dict,
             run=False,
         )
@@ -539,6 +535,8 @@ def fragfold3_pipeline(
     if root is not None:
         root = Path(root)
         params.convert_paths2relative(root=root)
+    # TODO: consider adding a function to convert everything back to 1-based indexing if the user set 1-based indexing in the params
+    # this would require renaming all of the output files
     params.save(main_output_dir / "fragfold_params.yaml")
 
 

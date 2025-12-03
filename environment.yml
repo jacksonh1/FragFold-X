@@ -3,7 +3,6 @@ channels:
   - conda-forge
   - plotly
 dependencies:
-  - python=3.10
   - flake8
   - isort
   - black
