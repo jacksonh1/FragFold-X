@@ -337,11 +337,22 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
         use_msa=params.use_fragment_msa,
     )
     # print(f"fragment source msa: {fragment_source_msa}")
-    fragment_indices = gen_fragment_indices_by_sliding(
-        length=len(fragment_source_msa.query.seq_str),
-        stride=params.stride,
-        fragment_length=params.fragment_length,
-    )
+    if params.fragment_indexing_method == "overlap":
+        fragment_indices = gen_fragment_indices_by_overlap(
+            length=len(fragment_source_msa.query.seq_str),
+            overlap=params.overlap,
+            fragment_length=params.fragment_length,
+        )
+    elif params.fragment_indexing_method == "sliding":
+        fragment_indices = gen_fragment_indices_by_sliding(
+            length=len(fragment_source_msa.query.seq_str),
+            stride=params.stride,
+            fragment_length=params.fragment_length,
+        )
+    else:
+        raise ValueError(
+            f"Invalid fragment_indexing_method: {params.fragment_indexing_method}. Must be 'overlap' or 'sliding'."
+        )
     a3m_files = []
     for fragment_index in fragment_indices:
         start, end = fragment_index
@@ -364,10 +375,10 @@ def setup(
     params: params.Fragfold3Params,
 ):
     main_output_dir = Path(params.output_directory)
-    # if main_output_dir.exists() and not params.overwrite:
-    #     raise FileExistsError(
-    #         f"Output directory {main_output_dir} already exists. Set `overwrite=True` to overwrite."
-    #     )
+    if main_output_dir.exists() and params.warn_output_exists:
+        raise FileExistsError(
+            f"Output directory {main_output_dir} already exists. Set `warn_output_exists=False` to suppress. exiting..."
+        )
     main_output_dir.mkdir(exist_ok=True, parents=True)
     a3m_files, af_input_dir = prepare_input_a3ms(params)
     predictions_dir = main_output_dir / "predictions"

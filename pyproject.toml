@@ -26,7 +26,7 @@ dependencies = [
     "py3Dmol",
     "logomaker",
     # "pymol-open-source", # causes issues with numpy. conda must be installing an earlier version of pymol that doesn't require numpy>2
-#    "a3mcat @ git+https://github.com/jacksonh1/a3mcat.git",
+    "a3mcat @ git+https://github.com/jacksonh1/a3mcat.git",
 ]
 [project.scripts]
 fragfold3 = "fragfold3.scripts.run_fragfold3:main"

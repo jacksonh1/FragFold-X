@@ -53,7 +53,7 @@ COLABFOLD_DATA = os.environ.get("COLABFOLD_DATA", EXECUTABLES["colabfold_data"])
 # // colabfold sbatch parameters file
 # ==============================================================================
 _COLABFOLD_SBATCH_PARAM_FILE = os.path.join(
-    os.path.dirname(__file__), "job_schedulers/default_colabfold_sbatch_params.json"
+    os.path.dirname(__file__), "job_schedulers/colabfold_sbatch_params.json"
 )
 COLABFOLD_SBATCH_PARAM_FILE = os.environ.get(
     "FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE", _COLABFOLD_SBATCH_PARAM_FILE

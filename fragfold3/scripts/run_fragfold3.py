@@ -61,6 +61,8 @@ def main():
 
     param_ob = ffparams.load_config(config_file=input_params_path, root=args.root)
     if args.colabfold_scheduler == 'slurm':
+        if not Path(args.colabfold_sbatch_param_file).exists():
+            raise FileNotFoundError(f"SLURM sbatch parameters file {args.colabfold_sbatch_param_file} does not exist.")
         logger.info(f"Using SLURM scheduler with sbatch parameters file: {args.colabfold_sbatch_param_file}")
         colab_slurm_submitter = slurm_job_submitter.SlurmJobSubmitter(
             sbatch_param_file=args.colabfold_sbatch_param_file

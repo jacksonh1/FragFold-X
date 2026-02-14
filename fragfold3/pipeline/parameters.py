@@ -58,21 +58,16 @@ class StructureScoreParameters:
 class Fragfold3Params:
     """
     """
-    # receptors: list[DomainMSA] = field(factory=list)
-    # receptor_msa: a3mcat.MSAa3m
-    # fragment_source_msa: a3mcat.MSAa3m
     fragment_source_fasta: str | Path
     fragment_slice_coords: tuple[int, int] = field(factory=tuple)
     receptor_fastas: list[str | Path] = field(factory=list)
     receptor_slice_coords: list[tuple[int, int]] = field(factory=list)
-    stride: int = field(default=1, converter=int)
-    fragment_length: int = field(default=30, converter=int)
-    msa_cache_dir: str | Path = field(default=config.MSA_CACHE_DIR)
+    output_directory: str | Path = field(default="fragfold3_output")
+    overwrite: bool = field(default=True, converter=bool)
+    warn_output_exists: bool = field(default=True, converter=bool)
+    # clear_output_directory: bool = field(default=False, converter=bool)
     colabfold_batch: str | Path = field(default=config.COLABFOLD_BATCH)
     colabfold_data: str | Path = field(default=config.COLABFOLD_DATA)
-    # _USalign_executable: str | Path = field(default=config.USALIGN_EXECUTABLE)
-    use_fragment_msa: bool = field(default=True, converter=bool)
-    use_receptor_msas: bool = field(default=True, converter=bool)
     model_weights: str = field(
         default="alphafold2_ptm",
         validator=validators.in_(
@@ -86,19 +81,23 @@ class Fragfold3Params:
             ]
         )
     )
-    output_directory: str | Path = field(default="fragfold3_output")
-    reference_pdb: str | Path | None = field(default=None)
     extra_colabfold_params: dict[str, Any] = field(factory=dict)
-    overwrite: bool = field(default=True, converter=bool)
+    use_fragment_msa: bool = field(default=True, converter=bool)
+    use_receptor_msas: bool = field(default=True, converter=bool)
+    msa_cache_dir: str | Path = field(default=config.MSA_CACHE_DIR)
     fragmentation_method: str = field(
         default="sliding_window",
         validator=validators.in_(["overlap", "sliding_window"])
-    ) # not implemented yet
+    )
+    fragment_length: int = field(default=30, converter=int)
+    stride: int = field(default=1, converter=int)
+    overlap_length: int = field(default=15, converter=int)
     indexing_base: Literal["1", "0"] = field(
         default="1",
         validator=validators.in_(["1", "0"]),
         converter=lambda x: str(x) # type: ignore
-    )  # 1-based or 0-based indexing for slice coordinates
+    )
+    reference_pdb: str | Path | None = field(default=None)
     structure_score_params: StructureScoreParameters | None = field(default=StructureScoreParameters())
     
     @classmethod

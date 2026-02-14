@@ -4,36 +4,47 @@ A tool to predict how short fragments of proteins bind to full length proteins.
 
 This project was written by Jackson C. Halpin.
 
-directory structure was based on CCDS template (https://cookiecutter-data-science.drivendata.org/)
-
-A small number of functions were copied or adapted/modified from the original FragFold codebase ([FragFold](https://github.com/swanss/FragFold)) and these cases are noted in the function docstrings where applicable. The only cases of this are in the files `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`
+The idea for the project comes from the original ([FragFold](https://github.com/swanss/FragFold)).A small number of functions were copied or adapted/modified from the original FragFold codebase ([FragFold](https://github.com/swanss/FragFold)) and these cases are noted in the function docstrings where applicable. These are in the files `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`
 
 some of the code here I have written for other projects over the years and adapted for this project.
 
 # overview
 
-This is essentially a reimplementation of FragFold, but with a few improvements and rewritten source code. The main improvements are:
+This is essentially a reimplementation of FragFold, but with a few added features and rewritten source code. The main improvements are:
 - ability to use multiple domains as the "receptor" for fragment binding
 - different ways to generate fragments (e.g. generate a fragment every N residues rather than every single residue, or split a protein into fragments which overlap by N residues)
 - completely refactored codebase that you may or may not find easier to use
 
-The original FragFold pipeline is recreated here. The main benefit of this code over the original is flexibility. The [a3mcat](https://github.com/jacksonh1/a3mcat) tool allows you to generate custom inputs for alphafold predictions programmatically using python. The `fragfold3` module contains wrappers for running colabfold predictions from within python, as well as utilities for scoring predicted peptide-domain structures. So you can generate custom inputs for structure prediction, execute those predictions, and analyze the resulting structures all from within python (even in a single script if you want). This is useful for large scale protein structure prediction tasks where you want to generate inputs and run predictions in a single pipeline.
+The original FragFold pipeline is recreated here. The potential benefit of this code over the original is flexibility. The [a3mcat](https://github.com/jacksonh1/a3mcat) tool allows you to generate custom inputs for alphafold predictions programmatically using python. The `fragfold3` module contains wrappers for running colabfold predictions from within python, as well as utilities for scoring predicted peptide-domain structures. So you can generate custom inputs for structure prediction, execute those predictions, and analyze the resulting structures all from within python (even in a single script if you want). This is useful for large scale or custom protein structure prediction tasks where you want to generate inputs and run predictions in a single pipeline. See the [custom applications](#custom-applications) section below for more details and examples.
 
 ## upcoming features:
-- [ ] add more scoring functions
+- [ ] add more scoring functions - particularly dockQ for the reference pdb
 - [ ] add a custom example and more demos
 - [ ] add more documentation for python module usage
 - [ ] add explanation of wrappers
 - [ ] explain root issue
 
-## Installation
+# Installation
 
-### Prerequisites
+**TL;DR**
+- run the following commands:
+  ```bash
+  git clone https://github.com/jacksonh1/FragFold3.git
+  cd FragFold3
+  make create_environment
+  conda activate fragfold3
+  ```
+- edit the `./fragfold3/executables.yaml` file to set paths to colabfold installation on your system (or set environment variables as described below)
+- edit the `fragfold3/job_schedulers/default_colabfold_sbatch_params.json` file if you plan to use SLURM job scheduling for colabfold predictions
+
+
+## Prerequisites
 - CUDA-capable GPU (recommended for ColabFold predictions)
 - Git
 - Conda (technically optional but required to use the makefile for installation in the following instructions)
 
-### Install Dependencies
+
+## Install Dependencies
 
 1. **Clone the repository:**
 ```bash
@@ -54,10 +65,10 @@ make create_environment
 - see [Configuring External Executable Paths](#configuring-external-executable-paths) section below for details on how to set up paths to the colabfold executables.
 
 
-### Configuring External Executable Paths
+## Configuring External Executable Paths
 You can configure the paths to the colabfold installed locally on your machine in two ways:
 
-#### 1. Using `executables.yaml`
+### 1. Using `executables.yaml`
 
 - The file `./fragfold3/executables.yaml` contains the default paths to required executables.
 - After cloning the repository, you can edit this file to set the correct paths for your system.
@@ -68,7 +79,7 @@ You can configure the paths to the colabfold installed locally on your machine i
   ```
 - the paths specified in this file will be used by default when running FragFold3 as long as fragfold3 is installed in editable mode (i.e. using `pip install -e .` or `make create_environment` as shown above).
 
-#### 2. Using Environment Variables
+### 2. Using Environment Variables
 - You can override the paths in `executables.yaml` by setting environment variables before running FragFold3.
 - Supported variables:
     - `COLABFOLD_BATCH`: Path to the ColabFold batch executable
@@ -88,9 +99,9 @@ echo 'export COLABFOLD_DATA=/custom/path/to/colabfold_data' >> ~/.bashrc
 ```
 
 
-## Usage
+# Usage
 
-### TL;DR
+## TL;DR
 
 **main command line interface** - `fragfold3`
 - `fragfold3 --input_params path/to/config.yaml`
@@ -103,7 +114,7 @@ echo 'export COLABFOLD_DATA=/custom/path/to/colabfold_data' >> ~/.bashrc
 - see [distributing colabfold predictions with a job manager](#distributing-colabfold-predictions-with-a-job-manager) for details and configuration options
 
 
-### Basics
+## Basics
 
 FragFold3 can be run using the main script with a YAML configuration file:
 
@@ -126,7 +137,7 @@ fragfold3.fragfold3_pipeline(parameters)
 ```
 
 
-### distributing colabfold predictions with a job manager
+## distributing colabfold predictions with a job manager
 Currently the only supported job manager is SLURM.
 
 The colabfold predictions can be distributed using a job manager by specifying the `--colabfold_scheduler` argument when running fragfold3. For example, to use SLURM:
@@ -144,7 +155,7 @@ Before running, make sure to configure the sbatch parameters to match your syste
 
 Parameter precedence:
 - if `--colabfold_sbatch_param_file` is provided as a cli argument, it takes precedence over the environment variable and the default file
-- if the environment variable `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` is set, it takes precedence over the default file
+- if the environment variable `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` is set, it takes precedence over the default file.<br>
 parameters are not merged - only one source is used based on the precedence above
 
 sbatch parameter file format:
@@ -168,32 +179,100 @@ alternatives or other ways to parallelize:
 - general note - colabfold inference uses basically 100 % of a GPU's processing power, so running multiple jobs in parallel on a single GPU is not really beneficial and will use more GPU memory. However, you can run multiple jobs in parallel on multiple GPUs.
 
 
-## Configuration (YAML Parameters)
+# Configuration (YAML Parameters)
 
-The input YAML file defines all parameters needed for a FragFold3 run. Below is a complete example with explanations:
+The input YAML file defines all parameters needed for a FragFold3 run. Below is a representative configuration:
 
 ```yaml
+fragment_source_fasta: data/example_fragment.fasta
+fragment_slice_coords: [5, 34]
+receptor_fastas:
+  - data/receptor_domain1.fasta
+  - data/receptor_domain2.fasta
+receptor_slice_coords:
+  - [12, 145]
+  - [50, 210]
+stride: 5
+fragment_length: 30
+use_fragment_msa: true
+use_receptor_msas: true
+msa_cache_dir: data/MSAs/colabfold_mmseqs
+output_directory: examples/example1/output
+colabfold_batch: /opt/localcolabfold/colabfold_batch
+colabfold_data: /opt/localcolabfold/data
+fragmentation_method: sliding_window
+indexing_base: "0"
+model_weights: alphafold2_ptm
+extra_colabfold_params:
+  pairmode: unpaired
+  num_models: 3
+structure_score_params:
+  contact_distance_cutoff: 4.5
+  chain_group_a: ["A"]
+  chain_group_b: ["B"]
+  n_processes: 4
 ```
 
-### Parameter Descriptions
+Coordinates are 1-based whenever `indexing_base: "1"`. **Important note** - FragFold3 converts them to 0-based regardless of what you put here. It just converts the coordinates to 0-based internally. This is reflected in the output files however. So if you provide 1-based coordinates, **the output files will be in standard pythonic 0-based coordinates**.<br>
+Paths are interpreted as absolute or relative to the working directory unless `--root` is provided to the cli.
+
+## Parameter Descriptions
+
+| Parameter | Type | Purpose | Default |
+| --- | --- | --- | --- |
+| `fragment_source_fasta` | str | Fragment sequence used to seed slicing and MSA lookups | required |
+| `fragment_slice_coords` | [int, int] | Start and end residue (per `indexing_base`) for the fragment | required |
+| `receptor_fastas` | list[str] | One or more receptor sequences to pair with the fragment. The same fasta file can be included multiple times for homo-oligomers | required |
+| `receptor_slice_coords` | list[[int, int]] | Slice coordinates for each receptor entry (same length as `receptor_fastas`) | required |
+| `stride` | int | Step size between fragment windows when generating fragments | `1` |
+| `fragment_length` | int | Width of each fragment window in residues | `30` |
+| `use_fragment_msa` | bool | Use a fragment MSA (true) or just the query sequence (false) | `true` |
+| `use_receptor_msas` | bool | Use receptor MSAs when constructing paired inputs | `true` |
+| `msa_cache_dir` | str | Directory where downloaded MSAs are cached | from `config.MSA_CACHE_DIR` |
+| `output_directory` | str | Root output folder for generated inputs and predictions | `fragfold3_output` |
+| `colabfold_batch` | str | Path to the `colabfold_batch` executable | from `config.COLABFOLD_BATCH` |
+| `colabfold_data` | str | Path to ColabFold data directory | from `config.COLABFOLD_DATA` |
+| `fragmentation_method` | str (`overlap` or `sliding_window`) | Strategy for generating fragments | `sliding_window` |
+| `indexing_base` | str (`"1"` or `"0"`) | Declares whether slice coordinates are 1-based or 0-based. Note - outputs are always 0-based standard pythonic coordinates | `"1"` |
+| `model_weights` | str | ColabFold model preset to run (`alphafold2`, `alphafold2_ptm`, etc.) | `alphafold2_ptm` |
+| `extra_colabfold_params` | dict | Additional keyword arguments forwarded to `colabfold_batch_wrapper` | `{}` |
+| `structure_score_params` | dict | Settings for downstream scoring routines (see below) | defaults shown |
+| `reference_pdb` | str | Optional structure used for alignment-based scoring. No scoring is implemented yet, but it does copy the reference pdb to the output directory | `null` |
+| `overwrite` | bool | regenerates the input a3m files only! To regenerate all outputs, delete the output directory | `true` |
+| `warn_output_exists` | bool | raise error if output directory already exists | `true` |
+
+**Structure scoring parameters**
+- `contact_distance_cutoff` (float, default `4.0`): maximum atom distance for a contact.
+- `chain_group_a` and `chain_group_b` (list[str] or `null`): define residue chain groupings; provide both or neither.
+- `n_processes` (int or `null`): parallel worker count for scoring utilities.
+
+**Path handling**
+- if `--root` is provided as a cli argument, all relative paths in the input YAML file are interpreted as relative to the provided root directory. If `--root` is not provided, all paths are interpreted as absolute or relative to the current working directory.
 
 
-## Output
+# Output
 
 FragFold3 generates the following output structure:
 ```
 output_directory/
 ├── fragfold_params.yaml      # Copy of input parameters
+├── position_plot.html        # Plot of weighted contacts vs. position in fragment
+├── position_plot.png         # Plot of weighted contacts vs. position in fragment
+├── structure_scores.csv      # Scoring results for predicted structures
 ├── input_files/              # Generated MSA files for ColabFold
 │   ├── fragment1_vs_receptor.a3m
 │   └── fragment2_vs_receptor.a3m
 └── predictions/              # ColabFold structure predictions
-    ├── fragment1_vs_receptor*_unrelaxed_rank_001_*.pdb
-    └── *.json
+    ├── fragment1_vs_receptor.a3m  # MSA files for ColabFold
+    ├── fragment1_vs_receptor*_unrelaxed_rank_00*_*.pdb
+    ├── fragment1_vs_receptor*_scores_rank_00*_*.json
+    └── ...
 ```
 
 
-## custom applications
+if you would like to rerun the output calculations without rerunning the structure predictions, you can just change the `structure_score_params` in the input YAML file and rerun the pipeline with warn_output_exists set to false in the yaml. It will not regenerate files that already exist in the output, but will overwrite the existing output files.
+
+# custom applications
 The fragfold3 pipeline boils down to a couple of very basic steps: 
 - downloading a3m files from colabfold mmSEQS server
 - manipulation of the msas to generate custom inputs for structure prediction (i.e. slicing out fragment msas and combining them with receptor msas)
@@ -237,40 +316,4 @@ colabfold_tools.colabfold_batch_wrapper(
     weights="alphafold2_ptm",
     pairmode="unpaired",
 )
-```
-
-## Project Organization
-
-```
-├── LICENSE                <- Open-source license if one is chosen
-├── Makefile               <- Makefile with convenience commands like `make create_environment` or `make requirements`
-├── README.md              <- The top-level README for developers using this project.
-├── data
-│   ├── processed          <- The final, canonical data sets for modeling.
-│   └── raw                <- The original, immutable data dump.
-│
-├── notebooks              <- Jupyter notebooks. Naming convention is a number (for ordering),
-│                         the date in yyyy-mm-dd format, and a short `_` delimited description, e.g.
-│                         `01-2025-05-13-data_exploration.ipynb`. "DE" equals data exploration.
-│
-├── pyproject.toml         <- Project configuration file with package metadata for
-│                         lir_proteome_screen_pssm and configuration for tools like black
-│
-├── ref_materials          <- powerpoints + old code and such to draw from
-│
-├── reports                <- Generated analysis as HTML, PDF, LaTeX, ppt, etc.
-│   └── figures            <- Generated graphics and figures to be used in reporting
-│
-├── requirements.txt       <- The requirements file for reproducing the analysis environment, e.g.
-│                           generated with `pip freeze > requirements.txt`
-│
-├── processing_scripts     <- scripts for processing data. This is where the tools in `lir_proteome_screen_pssm` are actually applied.
-│
-└── fragfold3   <- Source code for use in this project.
-    │
-    ├── __init__.py        <- Makes fragfold3 a Python module
-    │
-    ├── config.py          <- Store useful global variables and configuration
-    │
-    └── ...                <- ...
 ```
