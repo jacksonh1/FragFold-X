@@ -138,3 +138,28 @@ def test_scorer_csv_columns_match_filenames(tmp_path):
         assert int(r["fragment_start"]) == fs
         assert int(r["fragment_end"]) == fe
         assert float(r["fragment_center"]) == (fs + fe) / 2
+
+
+@needs_pdbs
+def test_scorer_records_params_file(tmp_path):
+    """The CSV's `fragfold_processing_params` column is populated when fragfold_params.yaml exists.
+
+    Guards the pipeline ordering fix: params are now saved (right after setup) *before* scoring,
+    so score_pdb finds `<output>/fragfold_params.yaml` and records it, instead of warning that the
+    file is missing and leaving the column empty.
+    """
+    import pandas as pd
+
+    params_yaml = PREDICTIONS.parent / "fragfold_params.yaml"
+    if not params_yaml.exists():
+        pytest.skip(f"{params_yaml} not present")
+    csv = tmp_path / "scores.csv"
+    result_summary.score_pdb_files_multiprocessing(
+        input_directory=PREDICTIONS, output_file=csv, n_processes=1
+    )
+    df = pd.read_csv(csv)
+    assert len(df) > 0
+    assert df["fragfold_processing_params"].notna().all()
+    for val in df["fragfold_processing_params"]:
+        assert Path(val).name == "fragfold_params.yaml"
+        assert Path(val).exists()

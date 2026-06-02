@@ -528,6 +528,10 @@ def fragfold3_pipeline(
         root = Path(root)
         params.convert_paths2abs(root=root)
     prepared_data = setup(params)
+    # Save params now (before scoring) so create_summary_csv/score_pdb can record
+    # fragfold_params.yaml in the CSV. It is re-saved at the end with relative paths when
+    # --root is given.
+    params.save(Path(params.output_directory) / "fragfold_params.yaml")
     a3m_files = prepared_data["a3m_files"]
     af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
@@ -577,6 +581,10 @@ def fragfold3_pipeline_scheduler(
     logger.info("running setup")
     prepared_data = setup(params)
     logger.info("finished setup")
+    # Save params now (before scoring) so create_summary_csv/score_pdb can record
+    # fragfold_params.yaml in the CSV. It is re-saved at the end with relative paths when
+    # --root is given.
+    params.save(Path(params.output_directory) / "fragfold_params.yaml")
     a3m_files = prepared_data["a3m_files"]
     # af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
