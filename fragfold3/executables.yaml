@@ -1,6 +1,3 @@
-colabfold_batch: "/home/jch/tools/localcolabfold/colabfold-conda/bin/colabfold_batch"
-colabfold_data: "/home/jch/tools/localcolabfold/colabfold"
-# chimerax: "/Applications/ChimeraX-1.9.app/Contents/bin/ChimeraX"
-# mafft: "mafft"
-# cd_hit: "cd-hit"
-# USalign: "USalign"
+colabfold_batch: "/home/jhalpin/tools/localcolabfold/colabfold-conda/bin/colabfold_batch"
+colabfold_data: "/home/jhalpin/tools/localcolabfold/colabfold"
+

@@ -6,6 +6,7 @@ dependencies:
   - flake8
   - isort
   - black
+  - pytest
   - pip
   - typer
   - loguru

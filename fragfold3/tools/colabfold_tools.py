@@ -18,27 +18,16 @@ def colabfold_batch_wrapper(
         "alphafold2_multimer_v3",
         "deepfold_v1",
     ] = "alphafold2_ptm",
-    pairmode: Literal[
-        "unpaired",
-        "paired",
-        "unpaired_paired",
-    ] = "unpaired",
     colabfold_executable: str | Path = env.COLABFOLD_BATCH,
     colabfold_data: str | Path = env.COLABFOLD_DATA,
-    extra_args: str | Path = "",
+    extra_args: str = "",
     run = True,
     # gpu_number: int = 0,
 ) -> str:
-    # subprocess.run(
-    #     "AVAILABLE_GPU=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader | sort -n -k2 | head -n1 | cut -d, -f1)",
-    #     shell=True,
-    #     check=True,
-    # )
-    # subprocess.run("export CUDA_VISIBLE_DEVICES=$AVAILABLE_GPU", shell=True, check=True)
-    # subprocess.run(f"export CUDA_VISIBLE_DEVICES={gpu_number}", shell=True, check=True)
-    # colab_command = f"{colabfold_executable} --model-type alphafold2_ptm --amber --num-relax 5 --use-gpu-relax --data '{colabfold_data}' --pair-mode unpaired {input_file_or_directory} {output_dir}"
-    # colab_command = f"export CUDA_VISIBLE_DEVICES={gpu_number}; {colabfold_executable} --model-type {weights} --data '{colabfold_data}' --pair-mode {pairmode} {extra_args} {input_file_or_directory} {output_dir}"
-    colab_command = f"{colabfold_executable} --model-type {weights} --data '{colabfold_data}' --pair-mode {pairmode} {extra_args} '{input_file_or_directory}' '{output_dir}'"
+    # pair-mode is fixed to "unpaired": fragfold3 builds its inputs with a3mcat, which only
+    # produces unpaired MSAs, so paired mode would silently produce wrong predictions.
+    # `extra_args` is a raw string of additional colabfold_batch flags (e.g. "--num-models 3").
+    colab_command = f"{colabfold_executable} --model-type {weights} --data '{colabfold_data}' --pair-mode unpaired {extra_args} '{input_file_or_directory}' '{output_dir}'"
     if run:
         subprocess.run(colab_command, shell=True, check=True)
         return colab_command

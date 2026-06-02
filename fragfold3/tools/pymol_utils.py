@@ -98,6 +98,23 @@ def align_pdbs_in_dir_and_overwrite(input_dir):
     align_pdbs(pdb_files, input_dir)  # Overwrites original files
 
 
+def align_pdbs_in_dir_to_ref(input_dir, ref_pdb_file):
+    """
+    Aligns all PDB files in the specified directory to the specified reference PDB file.
+    Overwrites the original PDB files with their aligned versions.
+
+    Parameters
+    ----------
+    input_dir : str or pathlib.Path
+        Directory containing PDB files to be aligned.
+    ref_pdb_file : str or pathlib.Path
+        Path to the reference PDB file.
+    """
+    input_dir = Path(input_dir)
+    pdb_files = list(input_dir.glob("*.pdb"))
+    align_pdbs([ref_pdb_file] + pdb_files, input_dir)  # Overwrites original files
+
+
 def color_residues_pymol(df, pdb_file, chain='B', colormap='magma', session_name=None, vmax=None, vmin=None):
     """
     Color residues in PyMOL based on residue-value mapping for a specific chain

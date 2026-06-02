@@ -16,12 +16,12 @@ inputs:
 
 from pathlib import Path
 import a3mcat
-import os
+# import os
 
 # import fragfold3
 import fragfold3.tools.plotting as plotting
 import matplotlib.pyplot as plt
-import fragfold3.pipeline.parameters as params
+import fragfold3.pipeline.parameters as ffparams
 import fragfold3.tools.colabfold_tools as colabfold_tools
 import fragfold3.tools.sequence_utils as seq_utils
 import fragfold3.job_schedulers.slurm_job_submitter as slurm_job_submitter
@@ -142,7 +142,7 @@ def run_colabfold_batch(
 def get_colabfold_batch_commands(
     a3m_files_or_directories: list[Path],
     output_dir: str | Path,
-    parameters: params.Fragfold3Params,
+    parameters: ffparams.Fragfold3Params,
 ):
     # param_list = []
     commands = []
@@ -154,7 +154,7 @@ def get_colabfold_batch_commands(
             "colabfold_executable": parameters.colabfold_batch,
             "colabfold_data": parameters.colabfold_data,
         }
-        param_dict.update(parameters.extra_colabfold_params)
+        param_dict["extra_args"] = parameters.extra_colabfold_params
         command = colabfold_tools.colabfold_batch_wrapper(
             **param_dict,
             run=False,
@@ -314,15 +314,26 @@ def prepare_fragment_source_msa(
     return fragment_source_msa, fragment_source_name
 
 
-def prepare_input_a3ms(params: params.Fragfold3Params):
+def prepare_input_a3ms(params: ffparams.Fragfold3Params):
     af_input_dir = Path(params.output_directory) / "input_files"
     af_input_dir.mkdir(exist_ok=True, parents=True)
     # clear any existing a3m files in the input directory
     if params.overwrite:
         clear_input_a3ms(af_input_dir)
+    # Slice coords are stored in the user's indexing base. Convert to 0-based here (and only
+    # here) for slicing the MSAs, since a3mcat uses python slicing. The output filenames
+    # below are built from the display-base coords directly, so they honor the input base.
+    base = int(params.indexing_base)
+    receptor_slice_coords_0 = [
+        (start - base, end - base) for start, end in params.receptor_slice_coords
+    ]
+    fragment_slice_coords_0 = (
+        params.fragment_slice_coords[0] - base,
+        params.fragment_slice_coords[1] - base,
+    )
     receptor_msa, receptor_name = prepare_receptor_msa(
         receptor_fastas=params.receptor_fastas,
-        receptor_slice_coords=params.receptor_slice_coords,
+        receptor_slice_coords=receptor_slice_coords_0,
         msa_cache_dir=params.msa_cache_dir,
         colabfold_executable=params.colabfold_batch,
         colabfold_data=params.colabfold_data,
@@ -330,20 +341,20 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
     )
     fragment_source_msa, fragment_source_name = prepare_fragment_source_msa(
         fragment_source_fasta=params.fragment_source_fasta,
-        fragment_slice_coords=params.fragment_slice_coords,
+        fragment_slice_coords=fragment_slice_coords_0,
         msa_cache_dir=params.msa_cache_dir,
         colabfold_executable=params.colabfold_batch,
         colabfold_data=params.colabfold_data,
         use_msa=params.use_fragment_msa,
     )
     # print(f"fragment source msa: {fragment_source_msa}")
-    if params.fragment_indexing_method == "overlap":
+    if params.fragmentation_method == "overlap":
         fragment_indices = gen_fragment_indices_by_overlap(
             length=len(fragment_source_msa.query.seq_str),
-            overlap=params.overlap,
+            overlap=params.overlap_length,
             fragment_length=params.fragment_length,
         )
-    elif params.fragment_indexing_method == "sliding":
+    elif params.fragmentation_method == "sliding_window":
         fragment_indices = gen_fragment_indices_by_sliding(
             length=len(fragment_source_msa.query.seq_str),
             stride=params.stride,
@@ -351,12 +362,12 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
         )
     else:
         raise ValueError(
-            f"Invalid fragment_indexing_method: {params.fragment_indexing_method}. Must be 'overlap' or 'sliding'."
+            f"Invalid fragmentation_method: {params.fragmentation_method}. Must be 'overlap' or 'sliding'."
         )
     a3m_files = []
     for fragment_index in fragment_indices:
         start, end = fragment_index
-        name = f"{fragment_source_name}-{params.fragment_slice_coords[0] + int(params.indexing_base) + start}to{params.fragment_slice_coords[0] + int(params.indexing_base) + end}_vs_{receptor_name}"
+        name = f"{fragment_source_name}-{params.fragment_slice_coords[0] + start}to{params.fragment_slice_coords[0] + end}_vs_{receptor_name}"
         file_name = af_input_dir / f"{name}.a3m"
         a3m_files.append(file_name)
         if file_name.exists():
@@ -372,7 +383,7 @@ def prepare_input_a3ms(params: params.Fragfold3Params):
 # ==============================================================================
 
 def setup(
-    params: params.Fragfold3Params,
+    params: ffparams.Fragfold3Params,
 ):
     main_output_dir = Path(params.output_directory)
     if main_output_dir.exists() and params.warn_output_exists:
@@ -406,7 +417,7 @@ def clear_input_a3ms(input_a3m_dir: str | Path):
 
 
 def align_pdbs(
-    params: params.Fragfold3Params,
+    params: ffparams.Fragfold3Params,
 ) -> None:
     predictions_dir = Path(params.output_directory) / "predictions"
     logger.info(f"aligning pdb files in {predictions_dir}")
@@ -419,7 +430,7 @@ def align_pdbs(
     logger.info(f"finished aligning pdb files in {predictions_dir}")
 
 
-def cleanup(params: params.Fragfold3Params):
+def cleanup(params: ffparams.Fragfold3Params):
     """
     Cleanup function to remove temporary files and directories.
     This is a placeholder for any cleanup logic you might want to implement.
@@ -433,7 +444,7 @@ def cleanup(params: params.Fragfold3Params):
         png_file.unlink()
 
 
-def create_summary_csv(params: params.Fragfold3Params):
+def create_summary_csv(params: ffparams.Fragfold3Params):
     """
     Post-processing function to handle the results of the ColabFold batch predictions.
     """
@@ -441,7 +452,7 @@ def create_summary_csv(params: params.Fragfold3Params):
     logger.info(f"summarizing results in {predictions_dir}")
     result_summary.score_pdb_files_multiprocessing(
         input_directory=predictions_dir,
-        output_file=Path(params.output_directory) / f"structure_scores.csv",
+        output_file=Path(params.output_directory) / "structure_scores.csv",
         n_processes=params.structure_score_params.n_processes,
         chain_group_a=params.structure_score_params.chain_group_a,
         chain_group_b=params.structure_score_params.chain_group_b,
@@ -450,7 +461,7 @@ def create_summary_csv(params: params.Fragfold3Params):
     logger.info(f"finished summarizing results in {predictions_dir}")
 
 
-def plot_results(params: params.Fragfold3Params):
+def plot_results(params: ffparams.Fragfold3Params):
     """
     Generate plots from the summary CSV file.
     """
@@ -459,7 +470,7 @@ def plot_results(params: params.Fragfold3Params):
         raise FileNotFoundError(
             f"Summary CSV file {summary_csv} does not exist. Run create_summary_csv first."
         )
-    filename1 = Path(params.output_directory) / f"position_plot.html"
+    filename1 = Path(params.output_directory) / "position_plot.html"
     receptors = [i.stem for i in params.receptor_fastas]
     fragment_source = params.fragment_source_fasta.stem
     fig, df = plotting.plotly_fragfold_results(
@@ -470,7 +481,7 @@ def plot_results(params: params.Fragfold3Params):
     )
     fig.write_html(filename1)
     title = f"fragment source: {fragment_source} - receptor(s): {' + '.join(receptors)}"
-    filename2 = Path(params.output_directory) / f"position_plot.png"
+    filename2 = Path(params.output_directory) / "position_plot.png"
     fig, ax = plotting.plot_fragfold_results(
         df=df,
         title=title,
@@ -509,7 +520,7 @@ def get_unfinished_a3m_files(input_a3ms: list, predictions_dir: str|Path):
 
 # @app.command()
 def fragfold3_pipeline(
-    params: params.Fragfold3Params,
+    params: ffparams.Fragfold3Params,
     root: str | Path | None = None,
     clean_files: bool = False,
 ):
@@ -529,7 +540,7 @@ def fragfold3_pipeline(
             weights=params.model_weights,  # type: ignore
             colabfold_executable=params.colabfold_batch,
             colabfold_data=params.colabfold_data,
-            **params.extra_colabfold_params,
+            extra_args=params.extra_colabfold_params,
         )
     if params.reference_pdb is not None:
         if not Path(params.reference_pdb).exists():
@@ -552,7 +563,7 @@ def fragfold3_pipeline(
 
 
 def fragfold3_pipeline_scheduler(
-    params: params.Fragfold3Params,
+    params: ffparams.Fragfold3Params,
     job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
     root: str | Path | None = None,
     max_jobs_allowed=2,
@@ -567,7 +578,7 @@ def fragfold3_pipeline_scheduler(
     prepared_data = setup(params)
     logger.info("finished setup")
     a3m_files = prepared_data["a3m_files"]
-    af_input_dir = prepared_data["af_input_dir"]
+    # af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
     logger.info("getting colabfold batch commands")
     logger.info("finished getting colabfold batch commands")

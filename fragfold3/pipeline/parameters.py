@@ -1,35 +1,34 @@
 import copy
 from pathlib import Path
-from typing import Any, Literal, Union
-from attrs import asdict, define, field, validators
-import a3mcat
-from typing import Literal, Optional, Tuple, Any
+from typing import Any, Literal
+from attrs import asdict, define, field, fields, validators
+# from typing import Literal, Optional, Tuple, Any, Union
 from fragfold3 import config
 import yaml
 from loguru import logger
 import fragfold3.tools.sequence_utils as seq_utils
 
 
-class DomainMSA:
+def _normalize_extra_colabfold_params(value: Any) -> Any:
+    """Backwards-compat for `extra_colabfold_params`.
 
-    def __init__(self, msa_file: str | Path, domain_start: int, domain_end: int):
-        self.msa_file = Path(msa_file)
-        self.domain_start = domain_start
-        self.domain_end = domain_end
-        self.msa = self._import_a3m()
-        self.sliced_msa = self.msa[domain_start - 1 : domain_end]
-
-    def _import_a3m(self):
-        """
-        Import the receptor MSA using a3mcat.
-        """
-        if not self.msa_file.exists():
-            raise FileNotFoundError(f"MSA file {self.msa_file} does not exist.")
-        a3m = a3mcat.MSAa3m.from_a3m_file(self.msa_file)
-        return a3m
-
-    def __repr__(self):
-        return f"DomainMSA(\nmsa_file={self.msa_file}, \ndomain_start={self.domain_start}, \ndomain_end={self.domain_end})"
+    The field used to be a dict (keys like `pairmode` and `extra_args`); it is now a plain
+    string of extra `colabfold_batch` flags. An old dict value is converted to that string by
+    keeping `extra_args` only — pair-mode is always `unpaired` now, and any other keys never
+    worked as colabfold flags, so they are dropped (with a warning). Strings (the new format)
+    pass through unchanged; other types are left for the validator to reject.
+    """
+    if isinstance(value, dict):
+        extra = value.get("extra_args", "")
+        dropped = {k: v for k, v in value.items() if k != "extra_args"}
+        if dropped:
+            logger.warning(
+                "`extra_colabfold_params` dict format is deprecated; converted to the string "
+                f"{extra!r}. Ignored keys {dropped} — pair-mode is always 'unpaired', and other "
+                "colabfold_batch flags must be passed as a raw string (e.g. '--num-models 3')."
+            )
+        return extra
+    return value
 
 
 @define
@@ -81,7 +80,11 @@ class Fragfold3Params:
             ]
         )
     )
-    extra_colabfold_params: dict[str, Any] = field(factory=dict)
+    extra_colabfold_params: str = field(
+        default="",
+        converter=_normalize_extra_colabfold_params,
+        validator=validators.instance_of(str),
+    )
     use_fragment_msa: bool = field(default=True, converter=bool)
     use_receptor_msas: bool = field(default=True, converter=bool)
     msa_cache_dir: str | Path = field(default=config.MSA_CACHE_DIR)
@@ -99,12 +102,23 @@ class Fragfold3Params:
     )
     reference_pdb: str | Path | None = field(default=None)
     structure_score_params: StructureScoreParameters | None = field(default=StructureScoreParameters())
-    
+
     @classmethod
     def from_dict(cls, d: dict[str, Any]):
         d = copy.deepcopy(d)
+        ssp_dict = d.pop("structure_score_params", {})
+        # Backwards-compat: drop structure_score_params keys that are no longer fields (e.g. the
+        # removed `chain_groups`), so old saved fragfold_params.yaml files still load.
+        valid = {f.name for f in fields(StructureScoreParameters)}
+        unknown = {k: v for k, v in ssp_dict.items() if k not in valid}
+        if unknown:
+            logger.warning(
+                f"Ignoring unrecognized structure_score_params keys (deprecated/removed): "
+                f"{sorted(unknown)}"
+            )
+            ssp_dict = {k: v for k, v in ssp_dict.items() if k in valid}
         return cls(
-            structure_score_params=StructureScoreParameters(**d.pop("structure_score_params", {})),
+            structure_score_params=StructureScoreParameters(**ssp_dict),
             **d
         )
 
@@ -176,7 +190,7 @@ class Fragfold3Params:
             else:
                 d[k] = v
         return d
-    
+
     def save(self, filename: str | Path):
         """
         Save the Fragfold3Params object to a YAML file.
@@ -186,7 +200,7 @@ class Fragfold3Params:
             filename = filename.with_suffix(".yaml")
         with open(filename, "w") as f:
             yaml.dump(self.to_writable_dict(), f, default_flow_style=False)
-        
+
 
     def print_params(self):
         for k, v in asdict(self).items():
@@ -207,40 +221,41 @@ class Fragfold3Params:
 # app = typer.Typer()
 
 
-def convert_1based_to_0based(slice_coords: tuple[int, int]) -> tuple[int, int]:
-    """
-    Convert 1-based slice coordinates to 0-based.
-    """
-    if slice_coords[0] == -1:
-        start = 0
-    elif slice_coords[0] > 0:
-        start = slice_coords[0] - 1
-    else:
-        raise ValueError(f"Invalid slice coordinates {slice_coords}")
-    if slice_coords[1] == -1:
-        end = -1
-    elif slice_coords[1] > 0:
-        end = slice_coords[1] - 1
-    else:
-        raise ValueError(f"Invalid slice coordinates {slice_coords}")
-    return (start, end)
-
-
-def adjust_slice_coords(
-    slice_coords: tuple[int, int], fasta_file: str | Path
+def resolve_slice_coords(
+    slice_coords: tuple[int, int], fasta_file: str | Path, base: int
 ) -> tuple[int, int]:
-    coords = list(slice_coords)
+    """
+    Resolve the ``-1`` "to-the-end" sentinel against the FASTA sequence length and
+    validate, keeping the coordinates in the user's indexing base.
+
+    Coordinates stay in ``base`` (0 or 1) — they are NOT converted to 0-based here. The
+    conversion to 0-based happens only at the slicing boundary in the pipeline
+    (``prepare_input_a3ms``). Both ends are inclusive. ``start == -1`` means "the first
+    residue" (``base``) and ``end == -1`` means "the last residue" (``len(seq) - 1 + base``).
+
+    Raises ValueError if the (resolved) coordinates fall outside ``[base, len(seq)-1+base]``.
+    """
     faimporter = seq_utils.FastaImporter(fasta_file)
-    frag_seq = faimporter.import_as_list()
-    if len(frag_seq) != 1:
+    seqs = faimporter.import_as_list()
+    if len(seqs) != 1:
         raise ValueError(
             f"Input fasta file {fasta_file} must contain exactly one sequence."
         )
-    frag_seq = frag_seq[0]
-    coords = list(convert_1based_to_0based(slice_coords))
-    if coords[1] == -1:
-        coords[1] = len(frag_seq) - 1
-    return tuple(coords)  # type: ignore
+    seq_len = len(seqs[0])
+    first = base
+    last = seq_len - 1 + base
+    start, end = slice_coords[0], slice_coords[1]
+    if start == -1:
+        start = first
+    if end == -1:
+        end = last
+    if not (first <= start <= end <= last):
+        raise ValueError(
+            f"slice coordinates {(slice_coords[0], slice_coords[1])} (indexing base "
+            f"{base}) are out of range [{first}, {last}] for {fasta_file} "
+            f"(sequence length {seq_len})."
+        )
+    return (start, end)
 
 
 def load_config(
@@ -255,7 +270,7 @@ def load_config(
     are None, raise a ValueError. If both `config_file` and `**extra_parameters` or `executables_file` are
     provided, they will be combined, with the following priority for any duplicate keys:
     `**extra_parameters` > `executables_file` > `config_file`.
-    
+
     For example, if `config_file` contains:
     ```yaml
     fragment_length: 30
@@ -265,8 +280,8 @@ def load_config(
     fragment_length=50
     ```
     then the resulting Fragfold3Params object will have `fragment_length` set to 50.
-    
-    
+
+
 
     Parameters:
     -----------
@@ -279,7 +294,7 @@ def load_config(
         merged with the parameters from `config_file` and `extra_parameters`.
     **extra_parameters: dict
         Additional parameters to override those in `config_file` and `executables_file`.
-    
+
     Returns:
     --------
     Fragfold3Params
@@ -302,19 +317,24 @@ def load_config(
     if len(config_dict) == 0:
         raise ValueError("No configuration parameters provided.")
     param_ob = Fragfold3Params.from_dict(config_dict)
-    if param_ob.indexing_base == "1":
-        if root is not None:
-            param_ob.convert_paths2abs(root=root)
-        param_ob.fragment_slice_coords = adjust_slice_coords(
-            param_ob.fragment_slice_coords, param_ob.fragment_source_fasta
+    # Resolve the -1 "to-the-end" sentinel and bounds-check the slice coordinates, keeping
+    # them in the user's indexing base. We do NOT convert to 0-based and do NOT mutate
+    # indexing_base here: the object stays self-consistent (coords always match
+    # indexing_base) and saved params round-trip. The 0-based conversion needed for slicing
+    # happens locally in prepare_input_a3ms. Reading the FASTA needs absolute paths, so this
+    # is wrapped in the same abs/relative path conversion as before.
+    base = int(param_ob.indexing_base)
+    if root is not None:
+        param_ob.convert_paths2abs(root=root)
+    param_ob.fragment_slice_coords = resolve_slice_coords(
+        param_ob.fragment_slice_coords, param_ob.fragment_source_fasta, base
+    )
+    for i, receptor_slice_coord in enumerate(param_ob.receptor_slice_coords):
+        param_ob.receptor_slice_coords[i] = resolve_slice_coords(
+            receptor_slice_coord, param_ob.receptor_fastas[i], base
         )
-        for i, receptor_slice_coord in enumerate(param_ob.receptor_slice_coords):
-            param_ob.receptor_slice_coords[i] = adjust_slice_coords(
-                receptor_slice_coord, param_ob.receptor_fastas[i]
-            )
-        param_ob.indexing_base = "0"
-        if root is not None:
-            param_ob.convert_paths2relative(root=root)
+    if root is not None:
+        param_ob.convert_paths2relative(root=root)
     return param_ob
 
 

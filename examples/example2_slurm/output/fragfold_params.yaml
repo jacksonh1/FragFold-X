@@ -1,6 +1,6 @@
 colabfold_batch: /home/jhalpin/tools/localcolabfold/colabfold-conda/bin/colabfold_batch
 colabfold_data: /home/jhalpin/tools/localcolabfold/colabfold
-extra_colabfold_params: {}
+extra_colabfold_params: ''
 fragment_length: 30
 fragment_slice_coords:
 - 162
@@ -11,6 +11,7 @@ indexing_base: '0'
 model_weights: alphafold2_ptm
 msa_cache_dir: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/data/MSAs/colabfold_mmseqs
 output_directory: output
+overlap_length: 15
 overwrite: true
 receptor_fastas:
 - ftsZ_A0A140NFM6.fasta
@@ -22,6 +23,8 @@ stride: 1
 structure_score_params:
   chain_group_a: null
   chain_group_b: null
-  chain_groups: null
   contact_distance_cutoff: 4.0
   n_processes: null
+use_fragment_msa: true
+use_receptor_msas: true
+warn_output_exists: true
