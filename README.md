@@ -2,12 +2,17 @@
 
 Predict how short peptide **fragments** of a protein bind to a full-length **receptor** protein, using AlphaFold2 (via ColabFold). fragfold3 slides a window along a protein sequence and, for each fragment, co-folds it against the receptor and scores the predicted interface. A peak in the score vs. fragment position points to a likely binding fragment.
 
-This is a reimplementation of the original [FragFold](https://github.com/swanss/FragFold) with a rewritten, more flexible codebase. A few functions are adapted from the original and credited in their docstrings (in `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`). Written by Jackson C. Halpin.
+This is a reimplementation of the original [FragFold](https://github.com/swanss/FragFold) with a rewritten codebase. A few functions are adapted from the original and credited in their docstrings (in `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`).
+
+Please cite the original FragFold paper if you use this:
+A. Savinov, S. Swanson, A. E. Keating, G.-W. Li. High-throughput discovery of inhibitory protein fragments with AlphaFold. Proceedings of the National Academy of Sciences 122(6), e2322412122 (2025). doi: 10.1073/pnas.2322412122
+
+Written by Jackson C. Halpin.
 
 **What's different from the original:**
 - multiple domains/chains as the receptor
 - flexible fragmentation (sliding window of any stride, or fixed overlap)
-- a clean Python API — generate inputs, run predictions, and score structures from a single script (see [Python API](#python-api))
+- a clean Python API rather than nextflow — generate inputs, run predictions, and score structures from python (see [Python API](#python-api))
 
 ---
 
