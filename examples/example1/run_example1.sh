@@ -1,1 +1,1 @@
-fragfold3 --input_params "./params.yaml"
+fragfoldx --input_params "./params.yaml"

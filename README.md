@@ -1,8 +1,8 @@
-# fragfold3
+# FragFold-X
 
-Predict how short peptide **fragments** of a protein bind to a full-length **receptor** protein, using AlphaFold2 (via ColabFold). fragfold3 slides a window along a protein sequence and, for each fragment, co-folds it against the receptor and scores the predicted interface. A peak in the score vs. fragment position points to a likely binding fragment.
+Predict how short peptide **fragments** of a protein bind to a full-length **receptor** protein, using AlphaFold2 (via ColabFold). fragfoldx slides a window along a protein sequence and, for each fragment, co-folds it against the receptor and scores the predicted interface. A peak in the score vs. fragment position points to a likely binding fragment.
 
-This is a reimplementation of the original [FragFold](https://github.com/swanss/FragFold) with a rewritten codebase. A few functions are adapted from the original and credited in their docstrings (in `fragfold3/tools/pdb_tools.py` and `fragfold3/structure_scoring/weighted_contacts.py`).
+This is a reimplementation of the original [FragFold](https://github.com/swanss/FragFold) with a rewritten codebase. A few functions are adapted from the original and credited in their docstrings (in `fragfoldx/tools/pdb_tools.py` and `fragfoldx/structure_scoring/weighted_contacts.py`).
 
 Please cite the original FragFold paper if you use this:
 A. Savinov, S. Swanson, A. E. Keating, G.-W. Li. High-throughput discovery of inhibitory protein fragments with AlphaFold. Proceedings of the National Academy of Sciences 122(6), e2322412122 (2025). doi: 10.1073/pnas.2322412122
@@ -21,19 +21,19 @@ Written by Jackson C. Halpin.
 **Requirements:** a CUDA-capable GPU (for predictions), git, and conda/mamba.
 
 ```bash
-git clone https://github.com/jacksonh1/FragFold3.git
-cd FragFold3
-make create_environment      # creates the `fragfold3` conda env and installs the package (editable)
-conda activate fragfold3
+git clone https://github.com/jacksonh1/FragFold-X.git
+cd FragFold-X
+make create_environment      # creates the `fragfoldx` conda env and installs the package (editable)
+conda activate fragfoldx
 ```
 
-Then install **localColabFold** (required to run structure predictions) by following its [instructions](https://github.com/YoshitakaMo/localcolabfold), and point fragfold3 at it (next section).
+Then install **localColabFold** (required to run structure predictions) by following its [instructions](https://github.com/YoshitakaMo/localcolabfold), and point fragfoldx at it (next section).
 
-### Point fragfold3 at ColabFold
+### Point fragfoldx at ColabFold
 
-fragfold3 needs the path to your `colabfold_batch` executable and the ColabFold data directory. Set them either way:
+fragfoldx needs the path to your `colabfold_batch` executable and the ColabFold data directory. Set them either way:
 
-- **Edit `fragfold3/executables.yaml`** (used by default in an editable install):
+- **Edit `fragfoldx/executables.yaml`** (used by default in an editable install):
   ```yaml
   colabfold_batch: "/path/to/colabfold_batch"
   colabfold_data: "/path/to/colabfold_data"
@@ -53,17 +53,39 @@ You can also set `colabfold_batch` / `colabfold_data` per-run in the config YAML
 Run with a YAML config file (see [Configuration](#configuration)):
 
 ```bash
-fragfold3 --input_params path/to/config.yaml
+fragfoldx --input_params path/to/config.yaml
 ```
 
-The `fragfold3` command is installed on your PATH (equivalently, run the script directly: `python fragfold3/scripts/run_fragfold3.py --input_params path/to/config.yaml`). See `examples/example1/` for a complete, runnable example.
+The `fragfoldx` command is installed on your PATH (equivalently, run the script directly: `python fragfoldx/scripts/run_fragfoldx.py --input_params path/to/config.yaml`). See `examples/example1/` for a complete, runnable example.
 
 Or use it from Python:
 
 ```python
-import fragfold3
-params = fragfold3.load_config("path/to/config.yaml")
-fragfold3.fragfold3_pipeline(params)
+import fragfoldx
+params = fragfoldx.load_config("path/to/config.yaml")
+fragfoldx.fragfoldx_pipeline(params)
+```
+
+### Paths and the root directory
+
+Every file path in the config (`fragment_source_fasta`, `receptor_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative. Relative paths are resolved against:
+
+- the directory you pass as `--root DIR`, if given; otherwise
+- the current working directory.
+
+So the simplest setup is to write the paths relative to your project layout and run `fragfoldx` from that directory (this is what `examples/example1/run_example1.sh` does — its paths are relative to the repo root). To run the **same** config from somewhere else — e.g. submitting from a scratch directory, or pointing several configs at one shared layout — pass `--root` instead of editing every path:
+
+```bash
+fragfoldx --input_params config.yaml --root /path/to/project
+```
+
+`--root` is applied to the whole run, and the resolved `fragfold_params.yaml` written into the output directory keeps its paths **relative to root**, so the saved config stays portable. (The `colabfold_batch` / `colabfold_data` executable paths are **not** affected by `--root` — give those as absolute paths, or set them in the global config / environment variables.)
+
+From Python, pass `root=` to both `load_config` and the pipeline:
+
+```python
+params = fragfoldx.load_config("config.yaml", root="/path/to/project")
+fragfoldx.fragfoldx_pipeline(params, root="/path/to/project")
 ```
 
 ### Running on a SLURM cluster
@@ -71,12 +93,12 @@ fragfold3.fragfold3_pipeline(params)
 To run the many fragment predictions in parallel as separate SLURM jobs, add `--colabfold_scheduler slurm`:
 
 ```bash
-fragfold3 --input_params config.yaml --colabfold_scheduler slurm --colabfold_max_jobs_allowed 2
+fragfoldx --input_params config.yaml --colabfold_scheduler slurm --colabfold_max_jobs_allowed 2
 ```
 
-fragfold3 submits each prediction with `sbatch` and keeps the queue topped up to `--colabfold_max_jobs_allowed` until all are done. Because it monitors until completion, you'll usually submit the `fragfold3` command itself as a job too — see `examples/example2_slurm/run_example2.sh`.
+fragfoldx submits each prediction with `sbatch` and keeps the queue topped up to `--colabfold_max_jobs_allowed` until all are done. Because it monitors until completion, you'll usually submit the `fragfoldx` command itself as a job too — see `examples/example2_slurm/run_example2.sh`.
 
-**sbatch settings** come from a JSON file. By default that's `fragfold3/job_schedulers/colabfold_sbatch_params.json` (edit it in place, since the install is editable). To use a different file, either set the `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` environment variable or pass `--colabfold_sbatch_param_file /path/to/file.json`. Only one file is used — they are **not** merged — with precedence: CLI flag > environment variable > default file. Example file:
+**sbatch settings** come from a JSON file. By default that's `fragfoldx/job_schedulers/colabfold_sbatch_params.json` (edit it in place, since the install is editable). To use a different file, either set the `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` environment variable or pass `--colabfold_sbatch_param_file /path/to/file.json`. Only one file is used — they are **not** merged — with precedence: CLI flag > environment variable > default file. Example file:
 
 ```json
 {
@@ -132,7 +154,7 @@ structure_score_params:
 
 > This applies to the fragment positions in filenames (the `fragment_start` / `fragment_end` / `fragment_center` columns and plot axes). Residue numbers inside the `contacts` column and the predicted PDB files are AlphaFold's per-chain numbering (each chain renumbered from 1), **not** source-protein coordinates.
 
-**Paths** are absolute or relative to the current directory, unless you pass `--root DIR` on the CLI, in which case relative paths are resolved against `DIR`.
+**Paths** are absolute or relative — see [Paths and the root directory](#paths-and-the-root-directory) for how relative paths are resolved (and the `--root` option).
 
 ### Parameters
 
@@ -149,8 +171,8 @@ structure_score_params:
 | `indexing_base` | `"1"` or `"0"` | Whether the coords above are 1- or 0-based. Outputs honor this base | `"1"` |
 | `use_fragment_msa` | bool | Use a fragment MSA (`true`) or just the single query sequence (`false`, faster/less accurate) | `true` |
 | `use_receptor_msas` | bool | Use receptor MSAs (vs. single sequences) | `true` |
-| `msa_cache_dir` | str | Where downloaded MSAs are cached (reused across runs; keyed by FASTA header) | `config.MSA_CACHE_DIR` |
-| `output_directory` | str | Output folder | `fragfold3_output` |
+| `msa_cache_dir` | str | Directory where downloaded MSAs are cached and reused — see [MSA cache](#msa-cache) | `config.MSA_CACHE_DIR` |
+| `output_directory` | str | Output folder | `fragfoldx_output` |
 | `model_weights` | str | ColabFold model preset: `alphafold2`, `alphafold2_ptm`, `alphafold2_multimer_v1`/`_v2`/`_v3`, or `deepfold_v1` | `alphafold2_ptm` |
 | `extra_colabfold_params` | str | Extra `colabfold_batch` flags appended verbatim to the command, e.g. `"--num-models 3"`. (Pair-mode is always `unpaired` — see note below) | `""` |
 | `colabfold_batch` | str | Path to `colabfold_batch` (overrides global config) | `config.COLABFOLD_BATCH` |
@@ -160,7 +182,7 @@ structure_score_params:
 | `overwrite` | bool | Regenerate the input a3m files (only). To redo everything, delete the output dir | `true` |
 | `warn_output_exists` | bool | Error out if the output dir already exists | `true` |
 
-> ColabFold's pair-mode is always `unpaired` and cannot be changed — fragfold3 builds its inputs with `a3mcat`, which produces unpaired MSAs.
+> ColabFold's pair-mode is always `unpaired` and cannot be changed — fragfoldx builds its inputs with `a3mcat`, which produces unpaired MSAs.
 
 **Fragmentation methods:**
 - `sliding_window` — windows of `fragment_length` residues, stepping by `stride` (e.g. `stride: 1` is every position; `stride: 5` is every 5th).
@@ -172,6 +194,26 @@ In both cases the last window is shifted back to stay in-bounds, so it may overl
 - `contact_distance_cutoff` (float, default `4.0`) — max atom-atom distance (Å) counted as a contact.
 - `chain_group_a` / `chain_group_b` (list[str] or `null`) — the two sides of the interface to count contacts between; set both or neither. **If left null (default), the last chain (the fragment) is one side and all other chains (the receptor) are the other** — i.e. fragment-vs-receptor contacts.
 - `n_processes` (int or `null`) — parallel workers for scoring (`null` = use all available / the SLURM allocation).
+
+---
+
+## MSA cache
+
+Before predicting, fragfoldx needs a multiple-sequence alignment (MSA) for the fragment-source protein and for each receptor (unless you disable them with `use_fragment_msa` / `use_receptor_msas`). Each MSA is downloaded once from the ColabFold MMseqs2 server and **cached on disk** in `msa_cache_dir` (default `<install>/data/MSAs/colabfold_mmseqs`), then reused on every later run.
+
+**How it works**
+- The MSA is downloaded for the **full sequence** in each FASTA and saved as `<msa_cache_dir>/<header>.a3m`, where `<header>` is the sequence id (the first whitespace-delimited token of the FASTA header). The domain slice (`fragment_slice_coords` / `receptor_slice_coords`) is applied *after* loading, in memory.
+- On each run, for every input fragfoldx looks for `<msa_cache_dir>/<header>.a3m`. If it exists, the download is **skipped** and the cached MSA is reused; otherwise it is downloaded and written there.
+
+**What this buys you**
+- Because the *full-length* MSA is cached and sliced in memory, one cached MSA is reused across runs that fragment **different regions** of the same protein, or that pair it with different receptors — the alignment is downloaded only once.
+- The cache is shared by every run that points at the same `msa_cache_dir`, so aim your configs at one shared directory to avoid re-downloading.
+
+**Gotchas**
+- ⚠️ **The cache key is the FASTA header, not the sequence.** Two different sequences that share a header id would collide on the same cache file. fragfoldx guards against this: on a cache hit it checks the cached MSA's query sequence against your input sequence and **raises an error** if they differ, telling you to rename the input header (recommended) or delete the stale cached `.a3m`. Still, give every protein a unique, descriptive header (e.g. `>ftsZ_ecoli`) to avoid the error in the first place.
+- New downloads need internet access to the MMseqs2 server. On a compute node with no outbound network, pre-populate the cache from a login node first — run the pipeline once, or call `colabfold_tools.colabfold_batch_MSA_wrapper` directly (see the [Python API](#python-api)) — then the offline run reuses it.
+- To force a fresh MSA, delete `<header>.a3m` (and the sibling ColabFold files) from `msa_cache_dir`.
+- `msa_cache_dir` is itself resolved relative to `--root`, like the other paths.
 
 ---
 
@@ -203,7 +245,7 @@ To re-score without re-predicting, change `structure_score_params`, set `warn_ou
 The pipeline is just a few steps you can also drive yourself: download MSAs → build custom a3m inputs → run ColabFold → score. MSA manipulation uses the companion [a3mcat](https://github.com/jacksonh1/a3mcat) package.
 
 ```python
-from fragfold3 import colabfold_tools
+from fragfoldx import colabfold_tools
 import a3mcat
 
 # 1. download an MSA from the ColabFold MMseqs2 server

@@ -1,4 +1,4 @@
-name: fragfold3
+name: fragfoldx
 channels:
   - conda-forge
   - plotly

@@ -3,7 +3,7 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "fragfold3"
+name = "fragfoldx"
 version = "0.0.1"
 description = "A tool to predict how short fragments of proteins bind to full length proteins"
 authors = [
@@ -35,7 +35,7 @@ dev = [
 ]
 
 [project.scripts]
-fragfold3 = "fragfold3.scripts.run_fragfold3:main"
+fragfoldx = "fragfoldx.scripts.run_fragfoldx:main"
 
 
 # [tool.flit.sdist]

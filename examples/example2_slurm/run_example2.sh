@@ -8,8 +8,8 @@
 MAX_JOBS=2
 PARAM_FILE="./params.yaml"
 
-source activate fragfold3
-fragfold3 --input_params "$PARAM_FILE" --colabfold_scheduler slurm --colabfold_max_jobs_allowed "$MAX_JOBS"
+source activate fragfoldx
+fragfoldx --input_params "$PARAM_FILE" --colabfold_scheduler slurm --colabfold_max_jobs_allowed "$MAX_JOBS"
 
 
 

@@ -2,7 +2,7 @@
 # GLOBALS                                                                       #
 #################################################################################
 
-PROJECT_NAME = fragfold3
+PROJECT_NAME = fragfoldx
 PYTHON_INTERPRETER = python
 
 #################################################################################
@@ -39,7 +39,7 @@ create_environment:
 ## Format source code with black
 .PHONY: format
 format:
-	black --config pyproject.toml fragfold3
+	black --config pyproject.toml fragfoldx
 #
 
 
