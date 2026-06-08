@@ -154,17 +154,6 @@ class Fragfold3Params:
             self.reference_pdb = root / Path(self.reference_pdb)
         self.output_directory = root / Path(self.output_directory)
 
-    def convert_paths2relative(self,  root: str | Path):
-        """
-        Convert all Path-like attributes to relative paths from the given root.
-        """
-        self.fragment_source_fasta = Path(self.fragment_source_fasta).resolve().relative_to(root)
-        self.receptor_fastas = [Path(f).resolve().relative_to(root) for f in self.receptor_fastas]
-        self.msa_cache_dir = Path(self.msa_cache_dir).resolve().relative_to(root)
-        if self.reference_pdb is not None:
-            self.reference_pdb = Path(self.reference_pdb).resolve().relative_to(root)
-        self.output_directory = Path(self.output_directory).resolve().relative_to(root)
-
     def to_writable_dict(self) -> dict[str, Any]:
         """
         Convert the Fragfold3Params object to a dictionary with writable values.
@@ -195,11 +184,7 @@ class Fragfold3Params:
         """
         Save the Fragfold3Params object to a YAML file.
         """
-        filename = Path(filename)
-        if not filename.suffix:
-            filename = filename.with_suffix(".yaml")
-        with open(filename, "w") as f:
-            yaml.dump(self.to_writable_dict(), f, default_flow_style=False)
+        save_params_dict(self.to_writable_dict(), filename)
 
 
     def print_params(self):
@@ -219,6 +204,20 @@ class Fragfold3Params:
 
 # import typer
 # app = typer.Typer()
+
+
+def save_params_dict(d: dict[str, Any], filename: str | Path):
+    """Write a params dict (as produced by ``Fragfold3Params.to_writable_dict``) to a YAML file.
+
+    Paths are written exactly as they appear in ``d`` — this module never rewrites a path's
+    representation on save, so relative paths stay relative (portable) and absolute paths stay
+    absolute. ``root`` is purely a runtime resolution mechanism and is never persisted.
+    """
+    filename = Path(filename)
+    if not filename.suffix:
+        filename = filename.with_suffix(".yaml")
+    with open(filename, "w") as f:
+        yaml.dump(d, f, default_flow_style=False)
 
 
 def resolve_slice_coords(
@@ -321,20 +320,31 @@ def load_config(
     # them in the user's indexing base. We do NOT convert to 0-based and do NOT mutate
     # indexing_base here: the object stays self-consistent (coords always match
     # indexing_base) and saved params round-trip. The 0-based conversion needed for slicing
-    # happens locally in prepare_input_a3ms. Reading the FASTA needs absolute paths, so this
-    # is wrapped in the same abs/relative path conversion as before.
+    # happens locally in prepare_input_a3ms.
+    #
+    # Reading the FASTAs needs a usable path, so apply `root` HERE only — in a local, without
+    # mutating the stored paths. `root` is purely a runtime resolution mechanism: the params
+    # object always holds the paths exactly as the user wrote them (relative stays relative,
+    # absolute overrides root), so `save()` echoes them verbatim and the saved
+    # fragfold_params.yaml stays portable.
     base = int(param_ob.indexing_base)
-    if root is not None:
-        param_ob.convert_paths2abs(root=root)
+
+    def _resolve_for_read(path: str | Path) -> Path:
+        # pathlib: `root / <absolute path>` returns the absolute path, so absolute paths in the
+        # config override `root` automatically.
+        return Path(root) / Path(path) if root is not None else Path(path)
+
     param_ob.fragment_slice_coords = resolve_slice_coords(
-        param_ob.fragment_slice_coords, param_ob.fragment_source_fasta, base
+        param_ob.fragment_slice_coords,
+        _resolve_for_read(param_ob.fragment_source_fasta),
+        base,
     )
     for i, receptor_slice_coord in enumerate(param_ob.receptor_slice_coords):
         param_ob.receptor_slice_coords[i] = resolve_slice_coords(
-            receptor_slice_coord, param_ob.receptor_fastas[i], base
+            receptor_slice_coord,
+            _resolve_for_read(param_ob.receptor_fastas[i]),
+            base,
         )
-    if root is not None:
-        param_ob.convert_paths2relative(root=root)
     return param_ob
 
 

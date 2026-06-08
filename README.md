@@ -68,25 +68,27 @@ fragfoldx.fragfoldx_pipeline(params)
 
 ### Paths and the root directory
 
-Every file path in the config (`fragment_source_fasta`, `receptor_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative. Relative paths are resolved against:
+Every file path in the config (`fragment_source_fasta`, `receptor_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative. At run time, each path is resolved against:
 
 - the directory you pass as `--root DIR`, if given; otherwise
 - the current working directory.
 
-So the simplest setup is to write the paths relative to your project layout and run `fragfoldx` from that directory (this is what `examples/example1/run_example1.sh` does — its paths are relative to the repo root). To run the **same** config from somewhere else — e.g. submitting from a scratch directory, or pointing several configs at one shared layout — pass `--root` instead of editing every path:
+An **absolute** path always overrides `--root` (it's used as-is). So the simplest setup is to write paths relative to your project layout and run `fragfoldx` from that directory (this is what `examples/example1/run_example1.sh` does — its paths are relative to the repo root). To run the **same** config from somewhere else — submitting from a scratch directory, or moving the project to another machine — pass `--root` instead of editing every path:
 
 ```bash
 fragfoldx --input_params config.yaml --root /path/to/project
 ```
 
-`--root` is applied to the whole run, and the resolved `fragfold_params.yaml` written into the output directory keeps its paths **relative to root**, so the saved config stays portable. (The `colabfold_batch` / `colabfold_data` executable paths are **not** affected by `--root` — give those as absolute paths, or set them in the global config / environment variables.)
+`--root` is **purely a runtime resolution mechanism** — it is *not* recorded anywhere. The `fragfold_params.yaml` written into the output directory echoes your path strings **exactly as you wrote them**: relative paths stay relative (so the saved config — like your input config — remains portable and can be re-run elsewhere with `--root`), and absolute paths stay absolute (self-contained). Because root isn't stored, re-running a saved config with relative paths needs the same `--root` again. (The `colabfold_batch` / `colabfold_data` executable paths are **not** affected by `--root` — give those as absolute paths, or set them in the global config / environment variables.)
 
-From Python, pass `root=` to both `load_config` and the pipeline:
+From Python, pass `root=` to `load_config` (it's applied for reading the FASTAs) and to the pipeline (applied for the run):
 
 ```python
 params = fragfoldx.load_config("config.yaml", root="/path/to/project")
 fragfoldx.fragfoldx_pipeline(params, root="/path/to/project")
 ```
+
+> **Generating configs programmatically?** `Fragfold3Params.save()` writes paths verbatim too, so build a params object (or dict) with the relative paths you want, `save()` it, transfer it, and run with `--root` on the target machine. `load_config()` reads the FASTAs to resolve slice coords (including the `-1` "to-the-end" sentinel), so if the data isn't on the machine where you're generating the yaml, build it with `Fragfold3Params.from_dict(...)` (no filesystem access) and let the coords resolve at run time on the target.
 
 ### Running on a SLURM cluster
 

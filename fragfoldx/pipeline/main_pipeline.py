@@ -550,14 +550,20 @@ def fragfoldx_pipeline(
     root: str | Path | None = None,
     clean_files: bool = False,
 ):
+    # Snapshot the params exactly as provided (paths in the user's representation) so the saved
+    # fragfold_params.yaml echoes them verbatim — relative stays relative (portable), absolute
+    # stays absolute — regardless of --root. convert_paths2abs below only affects the in-memory
+    # paths used to read/write files during this run.
+    params_snapshot = params.to_writable_dict()
     if root is not None:
         root = Path(root)
         params.convert_paths2abs(root=root)
     prepared_data = setup(params)
     # Save params now (before scoring) so create_summary_csv/score_pdb can record
-    # fragfold_params.yaml in the CSV. It is re-saved at the end with relative paths when
-    # --root is given.
-    params.save(Path(params.output_directory) / "fragfold_params.yaml")
+    # fragfold_params.yaml in the CSV.
+    ffparams.save_params_dict(
+        params_snapshot, Path(params.output_directory) / "fragfold_params.yaml"
+    )
     a3m_files = prepared_data["a3m_files"]
     af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
@@ -583,13 +589,10 @@ def fragfoldx_pipeline(
     if clean_files:
         cleanup(params)
     plot_results(params)
-    main_output_dir = Path(params.output_directory)
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2relative(root=root)
+    # fragfold_params.yaml was already written verbatim (the snapshot) before scoring, and nothing
+    # in the run changes it, so there is no second save.
     # TODO: consider adding a function to convert everything back to 1-based indexing if the user set 1-based indexing in the params
     # this would require renaming all of the output files
-    params.save(main_output_dir / "fragfold_params.yaml")
 
 
 def fragfoldx_pipeline_scheduler(
@@ -601,6 +604,8 @@ def fragfoldx_pipeline_scheduler(
     **job_submitter_kwargs,
 ):
     """distribute the individual predictions across any number of nodes using SLURM."""
+    # See fragfoldx_pipeline: snapshot the user's path representation up front, write it verbatim.
+    params_snapshot = params.to_writable_dict()
     if root is not None:
         root = Path(root)
         params.convert_paths2abs(root=root)
@@ -608,9 +613,10 @@ def fragfoldx_pipeline_scheduler(
     prepared_data = setup(params)
     logger.info("finished setup")
     # Save params now (before scoring) so create_summary_csv/score_pdb can record
-    # fragfold_params.yaml in the CSV. It is re-saved at the end with relative paths when
-    # --root is given.
-    params.save(Path(params.output_directory) / "fragfold_params.yaml")
+    # fragfold_params.yaml in the CSV.
+    ffparams.save_params_dict(
+        params_snapshot, Path(params.output_directory) / "fragfold_params.yaml"
+    )
     a3m_files = prepared_data["a3m_files"]
     # af_input_dir = prepared_data["af_input_dir"]
     predictions_dir = prepared_data["predictions_dir"]
@@ -652,8 +658,4 @@ def fragfoldx_pipeline_scheduler(
         cleanup(params)
         logger.info("finished cleaning up files")
     plot_results(params)
-    main_output_dir = Path(params.output_directory)
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2relative(root=root)
-    params.save(main_output_dir / "fragfold_params.yaml")
+    # fragfold_params.yaml was already written verbatim (the snapshot) before scoring; no re-save.

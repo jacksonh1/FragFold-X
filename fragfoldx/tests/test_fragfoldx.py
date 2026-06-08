@@ -221,3 +221,69 @@ def test_get_colabfold_msa_rejects_colliding_header(tmp_path):
     _write_cached_a3m(cache / "prot.a3m", "prot", "QQQQQQQQQQ")
     with pytest.raises(ValueError):
         main_pipeline.get_colabfold_msa(fasta, cache)
+
+
+# --- root resolves paths for reading only; it never rewrites the stored representation ---
+
+
+def _make_project(tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "p.fasta").write_text(">p\nMKVLAAGGTT\n")   # 10 residues
+
+
+def test_load_config_with_root_preserves_relative_paths(tmp_path):
+    _make_project(tmp_path)
+    p = ffparams.load_config(
+        fragment_source_fasta="data/p.fasta",
+        fragment_slice_coords=[1, 5],
+        receptor_fastas=["data/p.fasta"],
+        receptor_slice_coords=[[1, -1]],   # -1 must resolve via the root-applied read
+        msa_cache_dir="msas",
+        output_directory="out",
+        warn_output_exists=False,
+        root=tmp_path,
+    )
+    # stored paths are untouched (still relative); the -1 sentinel resolved against the 10-mer
+    assert str(p.fragment_source_fasta) == "data/p.fasta"
+    assert str(p.msa_cache_dir) == "msas"
+    assert tuple(p.receptor_slice_coords[0]) == (1, 10)
+    # save echoes them verbatim — the saved yaml stays portable
+    out = tmp_path / "saved.yaml"
+    p.save(out)
+    text = out.read_text()
+    assert "data/p.fasta" in text
+    assert "msas" in text
+
+
+def test_load_config_with_root_keeps_absolute_paths_absolute(tmp_path):
+    # an absolute msa_cache_dir outside root must NOT be forced relative or crash (the old bug)
+    _make_project(tmp_path)
+    fasta = tmp_path / "data" / "p.fasta"
+    abs_cache = tmp_path / "shared_cache"
+    p = ffparams.load_config(
+        fragment_source_fasta=str(fasta),     # absolute -> overrides root
+        fragment_slice_coords=[1, 5],
+        receptor_fastas=[str(fasta)],
+        receptor_slice_coords=[[1, 5]],
+        msa_cache_dir=str(abs_cache),         # absolute, outside root
+        output_directory="out",
+        warn_output_exists=False,
+        root=tmp_path / "elsewhere",          # root the abs paths are NOT under
+    )
+    assert Path(p.msa_cache_dir) == abs_cache
+    assert Path(p.fragment_source_fasta) == fasta
+
+
+def test_load_config_with_root_dot_does_not_crash(tmp_path, monkeypatch):
+    # `--root .` (root unresolved) used to crash convert_paths2relative; now it just works
+    _make_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    p = ffparams.load_config(
+        fragment_source_fasta="data/p.fasta",
+        fragment_slice_coords=[1, 5],
+        receptor_fastas=["data/p.fasta"],
+        receptor_slice_coords=[[1, 5]],
+        warn_output_exists=False,
+        root=Path("."),
+    )
+    assert str(p.fragment_source_fasta) == "data/p.fasta"
