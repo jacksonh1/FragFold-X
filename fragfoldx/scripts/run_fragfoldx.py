@@ -19,7 +19,7 @@ def parse_args():
     parser.add_argument(
         '--root',
         default=None,
-        help="Root directory that relative paths in the input parameters file are resolved against. If not provided, relative paths are resolved against the current working directory (and absolute paths are used as-is)."
+        help="Override the base directory that relative paths in the input parameters file are resolved against. If not provided, the base defaults to the directory containing the --input_params file (absolute paths are used as-is)."
     )
     parser.add_argument(
         '--colabfold_scheduler',
@@ -68,16 +68,16 @@ def main():
             sbatch_param_file=args.colabfold_sbatch_param_file
         )
         logger.info(f"SLURM sbatch parameters: {colab_slurm_submitter._create_sbatch_param_str()}")
+        # load_config already recorded the base on param_ob.base_dir (from --root or the config
+        # file's directory), so the pipeline resolves paths from that; no need to pass root again.
         main_pipeline.fragfoldx_pipeline_scheduler(
             params=param_ob,
-            root=args.root,
             max_jobs_allowed=args.colabfold_max_jobs_allowed,
             job_submitter=colab_slurm_submitter,
         )
     elif args.colabfold_scheduler == 'none':
         main_pipeline.fragfoldx_pipeline(
             params=param_ob,
-            root=args.root,
         )
 
 

@@ -550,19 +550,16 @@ def fragfoldx_pipeline(
     root: str | Path | None = None,
     clean_files: bool = False,
 ):
-    # Snapshot the params exactly as provided (paths in the user's representation) so the saved
-    # fragfold_params.yaml echoes them verbatim — relative stays relative (portable), absolute
-    # stays absolute — regardless of --root. convert_paths2abs below only affects the in-memory
+    # Resolve every relative path against the base (the config file's directory, set on the
+    # params by load_config) or an explicit `root` override. This produces absolute in-memory
     # paths used to read/write files during this run.
-    params_snapshot = params.to_writable_dict()
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2abs(root=root)
+    params.convert_paths2abs(base=root)
     prepared_data = setup(params)
     # Save params now (before scoring) so create_summary_csv/score_pdb can record
-    # fragfold_params.yaml in the CSV.
+    # fragfold_params.yaml in the CSV. This run record holds the RESOLVED (absolute) paths, so it
+    # is self-contained — reloading it to re-score/resume works from anywhere with no --root.
     ffparams.save_params_dict(
-        params_snapshot, Path(params.output_directory) / "fragfold_params.yaml"
+        params.to_writable_dict(), Path(params.output_directory) / "fragfold_params.yaml"
     )
     a3m_files = prepared_data["a3m_files"]
     af_input_dir = prepared_data["af_input_dir"]
@@ -604,18 +601,16 @@ def fragfoldx_pipeline_scheduler(
     **job_submitter_kwargs,
 ):
     """distribute the individual predictions across any number of nodes using SLURM."""
-    # See fragfoldx_pipeline: snapshot the user's path representation up front, write it verbatim.
-    params_snapshot = params.to_writable_dict()
-    if root is not None:
-        root = Path(root)
-        params.convert_paths2abs(root=root)
+    # See fragfoldx_pipeline: resolve relative paths against the base (config dir, or an explicit
+    # `root` override), then save the RESOLVED (absolute) params as a self-contained run record.
+    params.convert_paths2abs(base=root)
     logger.info("running setup")
     prepared_data = setup(params)
     logger.info("finished setup")
     # Save params now (before scoring) so create_summary_csv/score_pdb can record
     # fragfold_params.yaml in the CSV.
     ffparams.save_params_dict(
-        params_snapshot, Path(params.output_directory) / "fragfold_params.yaml"
+        params.to_writable_dict(), Path(params.output_directory) / "fragfold_params.yaml"
     )
     a3m_files = prepared_data["a3m_files"]
     # af_input_dir = prepared_data["af_input_dir"]

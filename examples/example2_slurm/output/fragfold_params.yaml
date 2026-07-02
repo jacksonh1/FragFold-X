@@ -5,12 +5,12 @@ fragment_length: 30
 fragment_slice_coords:
 - 162
 - 193
-fragment_source_fasta: ftsZ_A0A140NFM6.fasta
+fragment_source_fasta: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/examples/example2_slurm/ftsZ_A0A140NFM6.fasta
 fragmentation_method: sliding_window
 indexing_base: '0'
 model_weights: alphafold2_ptm
 msa_cache_dir: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/data/MSAs/colabfold_mmseqs
-output_directory: output
+output_directory: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/examples/example2_slurm/output
 overlap_length: 15
 overwrite: true
 reference_pdb: null
@@ -21,7 +21,7 @@ structure_score_params:
   contact_distance_cutoff: 4.0
   n_processes: null
 target_fastas:
-- ftsZ_A0A140NFM6.fasta
+- /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/examples/example2_slurm/ftsZ_A0A140NFM6.fasta
 target_slice_coords:
 - - 9
   - 316

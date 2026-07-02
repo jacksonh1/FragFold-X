@@ -68,17 +68,16 @@ fragfoldx.fragfoldx_pipeline(params)
 
 ### Paths and the root directory
 
+
+**TL;DR:** relative paths in the config are resolved against the config file's folder by default. Use `--root DIR` to override that base.
+
+
 Paths inside the config (`fragment_source_fasta`, `target_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative:
 
 - **Absolute paths** are used exactly as written.
-- **Relative paths** are resolved at run time by joining them onto a base directory: `<base>/<path from the config>`.
+- **Relative paths** are resolved by joining them onto a base directory. **By default the base is the directory containing the config file** — so a relative path like `data/x.fasta` in `/projects/ftsZ/config.yaml` points at `/projects/ftsZ/data/x.fasta`, no matter which directory you run `fragfoldx` from.
 
-**What `--root` is for.** A relative path on its own is ambiguous — where it points depends on which directory you happen to run the command from. `--root DIR` names that base explicitly: every relative path in the config is joined onto `DIR` before the run (if you omit `--root`, the base is just your current working directory). This is what lets a config stay portable — you write its paths relative to one base directory, and `--root` says where that base lives on *this* machine. Move the project, or submit from a scratch directory, and you change only `--root`; the config never changes.
-
-So there are two sensible ways to write a config:
-
-- **Absolute paths** — simplest; they resolve the same way no matter where you run. The trade-off is the config is tied to one machine's layout.
-- **Relative paths + `--root`** — portable, as above.
+Config-file-relative resolution is what makes a config portable: write every path relative to the config's own folder, and the config runs the same from any working directory. Move the whole folder — to a scratch dir or another machine — and nothing inside the config needs to change.
 
 **Example.** A config at `/projects/ftsZ/config.yaml` containing:
 
@@ -86,33 +85,40 @@ So there are two sensible ways to write a config:
 fragment_source_fasta: data/fragment_protein.fasta
 target_fastas:
   - data/target_domain1.fasta
+output_directory: output
 ```
 
-run with `--root /projects/ftsZ`:
+resolves to `/projects/ftsZ/data/fragment_protein.fasta`, `/projects/ftsZ/data/target_domain1.fasta`, and outputs to `/projects/ftsZ/output/` — and does so whether you run:
 
 ```bash
-fragfoldx --input_params /projects/ftsZ/config.yaml --root /projects/ftsZ
+cd /projects/ftsZ && fragfoldx --input_params config.yaml
+# ...or, from anywhere:
+fragfoldx --input_params /projects/ftsZ/config.yaml
 ```
 
-resolves those FASTAs to `/projects/ftsZ/data/fragment_protein.fasta` and `/projects/ftsZ/data/target_domain1.fasta` (each relative path joined onto the root). The mechanism allows `fragfoldx` to be run from any directory and the paths in the config will be resolved relative to `root`. Additionally, you can copy the whole `ftsZ/` folder elsewhere and only `--root` changes — the config is untouched.
+**Overriding the base with `--root`.** If your config's relative paths are written against some *other* directory (e.g. the config lives in a `configs/` folder but its paths are relative to a project root, or you want to redirect a run into a scratch tree), pass `--root DIR` to use `DIR` as the base instead of the config file's directory:
 
-> Passing `--root` is optional: with no `--root`, relative paths resolve against your current directory (where you run fragfoldx). That's how `examples/example1/` runs — `run_example1.sh` is launched from inside `examples/example1/`, so the base is implicitly that directory (see `run_example1.sh`).
+```bash
+fragfoldx --input_params configs/run1.yaml --root /projects/ftsZ
+```
 
-**Two things `--root` does *not* apply to:**
+**Two things the base does *not* apply to:**
 
-- **The `--input_params` path itself.** The config file is found relative to your current directory (or given as an absolute path); `--root` only affects the paths *inside* it.
 - **`colabfold_batch` / `colabfold_data`.** Give these as absolute paths, or set them in the global config / environment variables.
+- **The `--input_params` path itself.** You point at the config file relative to your current directory (or absolutely); the base only governs the paths *inside* it.
 
-**`--root` is never saved.** The `fragfold_params.yaml` written into the output directory echoes your path strings exactly as you wrote them — relative stays relative, absolute stays absolute — so a saved config is as portable as your input config, but re-running one that uses relative paths needs the same `--root` again.
+**Input configs vs. the saved run record.** An input config you write stays portable: `Fragfold3Params.save()` and the programmatic API preserve your path strings verbatim (relative stays relative). The `fragfold_params.yaml` that a run writes into its output directory is different — it records the **resolved, absolute** paths of that run, so it is self-contained: you can reload it later (e.g. to re-score) from anywhere with no `--root`.
 
-If you are calling fragfoldx from within python, you can pass `root=` to both `load_config` (used to read the FASTAs) and the pipeline (used for the run):
+From Python, the base defaults to the config file's directory too; pass `root=` to `load_config` only if you need to override it:
 
 ```python
-params = fragfoldx.load_config("config.yaml", root="/projects/ftsZ")
-fragfoldx.fragfoldx_pipeline(params, root="/projects/ftsZ")
+params = fragfoldx.load_config("/projects/ftsZ/config.yaml")   # base = /projects/ftsZ
+fragfoldx.fragfoldx_pipeline(params)
 ```
 
-> **Generating configs programmatically?** Saved YAMLs are portable — `Fragfold3Params.save()` writes every path exactly as given — so you can build a params object on one machine, `save()` it, copy it elsewhere, and run there with `--root`.
+> **Generating configs programmatically?** `Fragfold3Params.save()` writes every path exactly as given, so you can build a params object with relative paths, `save()` it into the folder those paths are relative to, copy that folder elsewhere, and run it there unchanged.
+
+> **Note (behavior change):** relative paths now resolve against the **config file's directory** by default. Previously they resolved against the current working directory (and `--root` was required for portability). Configs that use absolute paths, or that are run from the config's own directory, are unaffected; otherwise pass `--root` to reproduce the old base.
 
 ### Running on a SLURM cluster
 
@@ -239,7 +245,7 @@ Before predicting, fragfoldx needs a multiple-sequence alignment (MSA) for the f
 - ⚠️ **The cache key is the FASTA header, not the sequence.** Two different sequences that share a header id would collide on the same cache file. fragfoldx guards against this: on a cache hit it checks the cached MSA's query sequence against your input sequence and **raises an error** if they differ, telling you to rename the input header (recommended) or delete the stale cached `.a3m`. Still, give every protein a unique, descriptive header (e.g. `>ftsZ_ecoli`) to avoid the error in the first place.
 - New downloads need internet access to the MMseqs2 server. On a compute node with no outbound network, pre-populate the cache from a login node first — run the pipeline once, or call `colabfold_tools.colabfold_batch_MSA_wrapper` directly (see the [Python API](#python-api)) — then the offline run reuses it.
 - To force a fresh MSA, delete `<header>.a3m` (and the sibling ColabFold files) from `msa_cache_dir`.
-- `msa_cache_dir` is itself resolved relative to `--root`, like the other paths unless an absolute path is provided.
+- `msa_cache_dir` is itself resolved against the base (the config file's directory, or `--root`) like the other paths, unless an absolute path is provided.
 
 ---
 

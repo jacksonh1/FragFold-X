@@ -264,6 +264,8 @@ def test_load_config_with_root_preserves_relative_paths(tmp_path):
         warn_output_exists=False,
         root=tmp_path,
     )
+    # an explicit root becomes the base
+    assert p.base_dir == tmp_path
     # stored paths are untouched (still relative); the -1 sentinel resolved against the 10-mer
     assert str(p.fragment_source_fasta) == "data/p.fasta"
     assert str(p.msa_cache_dir) == "msas"
@@ -308,3 +310,51 @@ def test_load_config_with_root_dot_does_not_crash(tmp_path, monkeypatch):
         root=Path("."),
     )
     assert str(p.fragment_source_fasta) == "data/p.fasta"
+
+
+# --- default base is the config file's directory (portable, not CWD-dependent) ---
+
+
+def test_load_config_defaults_base_to_config_dir(tmp_path, monkeypatch):
+    # A config with relative paths must resolve against the config file's own directory, NOT the
+    # current working directory. Written from a different CWD, the FASTA (and the -1 sentinel) must
+    # still resolve.
+    _make_project(tmp_path)
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "fragment_source_fasta: data/p.fasta\n"
+        "fragment_slice_coords: [1, 5]\n"
+        "target_fastas: [data/p.fasta]\n"
+        "target_slice_coords: [[1, -1]]\n"   # -1 must resolve against the 10-mer via the config-dir base
+        "output_directory: out\n"
+        "warn_output_exists: false\n"
+    )
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.chdir(tmp_path / "elsewhere")   # a CWD where "data/p.fasta" does NOT exist
+    p = ffparams.load_config(config_file=config_file)   # no root
+    assert p.base_dir == config_file.parent
+    assert tuple(p.target_slice_coords[0]) == (1, 10)   # resolved -> FASTA was found next to the config
+    # stored paths stay verbatim/relative (portable)
+    assert str(p.fragment_source_fasta) == "data/p.fasta"
+
+
+def test_convert_paths2abs_yields_absolute_record(tmp_path):
+    # The run record is written after convert_paths2abs, so its paths must be absolute and rooted
+    # at the config dir — self-contained and reloadable with no --root.
+    _make_project(tmp_path)
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        "fragment_source_fasta: data/p.fasta\n"
+        "fragment_slice_coords: [1, 5]\n"
+        "target_fastas: [data/p.fasta]\n"
+        "target_slice_coords: [[1, 5]]\n"
+        "output_directory: out\n"
+        "warn_output_exists: false\n"
+    )
+    p = ffparams.load_config(config_file=config_file)
+    p.convert_paths2abs()   # base defaults to p.base_dir (the config dir)
+    assert p.fragment_source_fasta.is_absolute()
+    assert p.fragment_source_fasta == (tmp_path / "data" / "p.fasta").resolve()
+    assert p.output_directory == (tmp_path / "out").resolve()
+    # the record serialization excludes the runtime-only base_dir
+    assert "base_dir" not in p.to_writable_dict()

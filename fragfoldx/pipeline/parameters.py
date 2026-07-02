@@ -132,6 +132,10 @@ class Fragfold3Params:
     )
     reference_pdb: str | Path | None = field(default=None)
     structure_score_params: StructureScoreParameters | None = field(default=StructureScoreParameters())
+    # Runtime-only base directory that relative paths are resolved against. Set by `load_config`
+    # (to the config file's directory, or an explicit `root` override). NOT a config key and
+    # NEVER persisted — `to_writable_dict` skips it so saved yamls stay clean and round-trip.
+    base_dir: Path | None = field(default=None, init=False)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]):
@@ -174,16 +178,26 @@ class Fragfold3Params:
         # self._USalign_executable = Path(self._USalign_executable)
 
 
-    def convert_paths2abs(self, root: str | Path):
+    def convert_paths2abs(self, base: str | Path | None = None):
         """
-        Convert all Path-like attributes to absolute paths relative to the given root.
+        Resolve all relative path attributes against ``base``, producing absolute paths.
+
+        ``base`` defaults to ``self.base_dir`` (set by ``load_config`` to the config file's
+        directory, or an explicit ``root`` override), and to the current working directory if
+        neither is set. ``base`` is resolved to an absolute path first, so the results are
+        absolute and self-contained. Absolute path attributes override ``base`` automatically
+        (``base / <absolute path>`` returns the absolute path unchanged).
         """
-        self.fragment_source_fasta = root / Path(self.fragment_source_fasta)
-        self.target_fastas = [root / Path(f) for f in self.target_fastas]
-        self.msa_cache_dir = root / Path(self.msa_cache_dir)
+        base = Path(base) if base is not None else self.base_dir
+        if base is None:
+            base = Path.cwd()
+        base = base.resolve()
+        self.fragment_source_fasta = base / Path(self.fragment_source_fasta)
+        self.target_fastas = [base / Path(f) for f in self.target_fastas]
+        self.msa_cache_dir = base / Path(self.msa_cache_dir)
         if self.reference_pdb is not None:
-            self.reference_pdb = root / Path(self.reference_pdb)
-        self.output_directory = root / Path(self.output_directory)
+            self.reference_pdb = base / Path(self.reference_pdb)
+        self.output_directory = base / Path(self.output_directory)
 
     def to_writable_dict(self) -> dict[str, Any]:
         """
@@ -191,9 +205,9 @@ class Fragfold3Params:
         """
         d = {}
         for k, v in asdict(self).items():
-            # if k in ["_colabfold_data", "_colabfold_batch"]:
-            #     # Skip private attributes
-            #     continue
+            if k == "base_dir":
+                # Runtime-only; never persisted.
+                continue
             if isinstance(v, Path):
                 d[k] = str(v)
             elif isinstance(v, list):
@@ -220,6 +234,8 @@ class Fragfold3Params:
 
     def print_params(self):
         for k, v in asdict(self).items():
+            if k == "base_dir":
+                continue
             if isinstance(v, dict):
                 print(f"{k}:")
                 for k2, v2 in v.items():
@@ -316,7 +332,9 @@ def load_config(
     config_file: str | Path | None
         Path to the YAML configuration file.
     root: Path | None
-        Root directory to convert relative paths to absolute paths. If None, paths are assumed to be absolute.
+        Override for the base directory that relative paths in the config are resolved against.
+        If None, the base defaults to the config file's directory (or the current working
+        directory when no `config_file` is given). Absolute paths ignore the base.
     executables_file: str | Path | None
         Path to a YAML file containing paths to required executables. If provided, these will be
         merged with the parameters from `config_file` and `extra_parameters`.
@@ -345,23 +363,33 @@ def load_config(
     if len(config_dict) == 0:
         raise ValueError("No configuration parameters provided.")
     param_ob = Fragfold3Params.from_dict(config_dict)
+    # Determine the base directory that relative paths are resolved against, and stash it on the
+    # params object (runtime-only, never persisted). Precedence:
+    #   explicit `root` override  >  the config file's own directory  >  current working directory.
+    # Resolving relative to the config file's directory is the default so a config is portable:
+    # it runs the same from any working directory, and moving its folder needs no path edits.
+    if root is not None:
+        param_ob.base_dir = Path(root)
+    elif config_file is not None:
+        param_ob.base_dir = Path(config_file).parent
+    else:
+        param_ob.base_dir = Path.cwd()
     # Resolve the -1 "to-the-end" sentinel and bounds-check the slice coordinates, keeping
     # them in the user's indexing base. We do NOT convert to 0-based and do NOT mutate
     # indexing_base here: the object stays self-consistent (coords always match
     # indexing_base) and saved params round-trip. The 0-based conversion needed for slicing
     # happens locally in prepare_input_a3ms.
     #
-    # Reading the FASTAs needs a usable path, so apply `root` HERE only — in a local, without
-    # mutating the stored paths. `root` is purely a runtime resolution mechanism: the params
-    # object always holds the paths exactly as the user wrote them (relative stays relative,
-    # absolute overrides root), so `save()` echoes them verbatim and the saved
-    # fragfold_params.yaml stays portable.
+    # Reading the FASTAs needs a usable path, so apply the base HERE only — in a local, without
+    # mutating the stored paths. The params object always holds the paths exactly as the user
+    # wrote them (relative stays relative, absolute overrides the base), so `save()` echoes them
+    # verbatim and an authored/generated config stays portable.
     base = int(param_ob.indexing_base)
 
     def _resolve_for_read(path: str | Path) -> Path:
-        # pathlib: `root / <absolute path>` returns the absolute path, so absolute paths in the
-        # config override `root` automatically.
-        return Path(root) / Path(path) if root is not None else Path(path)
+        # pathlib: `base_dir / <absolute path>` returns the absolute path, so absolute paths in
+        # the config override the base automatically.
+        return param_ob.base_dir / Path(path)
 
     param_ob.fragment_slice_coords = resolve_slice_coords(
         param_ob.fragment_slice_coords,
