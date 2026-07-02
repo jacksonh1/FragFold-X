@@ -1,0 +1,30 @@
+colabfold_batch: /home/jhalpin/tools/localcolabfold/colabfold-conda/bin/colabfold_batch
+colabfold_data: /home/jhalpin/tools/localcolabfold/colabfold
+extra_colabfold_params: ''
+fragment_length: 30
+fragment_slice_coords:
+- 163
+- 194
+fragment_source_fasta: ftsZ_A0A140NFM6.fasta
+fragmentation_method: sliding_window
+indexing_base: '1'
+model_weights: alphafold2_ptm
+msa_cache_dir: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/data/MSAs/colabfold_mmseqs
+output_directory: output/alphafold2_ptm
+overlap_length: 15
+overwrite: true
+target_fastas:
+- ftsZ_A0A140NFM6.fasta
+target_slice_coords:
+- - 10
+  - 317
+reference_pdb: null
+stride: 1
+structure_score_params:
+  chain_group_a: null
+  chain_group_b: null
+  contact_distance_cutoff: 4.0
+  n_processes: null
+use_fragment_msa: true
+use_target_msas: true
+warn_output_exists: false

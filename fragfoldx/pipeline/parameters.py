@@ -31,6 +31,36 @@ def _normalize_extra_colabfold_params(value: Any) -> Any:
     return value
 
 
+def _migrate_receptor_keys(d: dict[str, Any]) -> dict[str, Any]:
+    """Backwards-compat for the old `receptor_*` config keys.
+
+    The nomenclature changed from "receptor" to "target"; the config keys `receptor_fastas`,
+    `receptor_slice_coords`, and `use_receptor_msas` were renamed to their `target_*` equivalents.
+    Old configs (including saved `fragfold_params.yaml` files) are migrated here with a warning so
+    they keep loading for re-scoring. If both the old and new key are present the input is
+    ambiguous, so we fail loudly rather than silently pick one. Mutates and returns `d`.
+    """
+    renames = {
+        "receptor_fastas": "target_fastas",
+        "receptor_slice_coords": "target_slice_coords",
+        "use_receptor_msas": "use_target_msas",
+    }
+    for old_key, new_key in renames.items():
+        if old_key not in d:
+            continue
+        if new_key in d:
+            raise ValueError(
+                f"Config contains both the deprecated key `{old_key}` and its replacement "
+                f"`{new_key}`. Remove `{old_key}` — it was renamed to `{new_key}`."
+            )
+        logger.warning(
+            f"Config key `{old_key}` is deprecated and was renamed to `{new_key}`; "
+            "please update your config."
+        )
+        d[new_key] = d.pop(old_key)
+    return d
+
+
 @define
 class StructureScoreParameters:
     """
@@ -59,8 +89,8 @@ class Fragfold3Params:
     """
     fragment_source_fasta: str | Path
     fragment_slice_coords: tuple[int, int] = field(factory=tuple)
-    receptor_fastas: list[str | Path] = field(factory=list)
-    receptor_slice_coords: list[tuple[int, int]] = field(factory=list)
+    target_fastas: list[str | Path] = field(factory=list)
+    target_slice_coords: list[tuple[int, int]] = field(factory=list)
     output_directory: str | Path = field(default="fragfoldx_output")
     overwrite: bool = field(default=True, converter=bool)
     warn_output_exists: bool = field(default=True, converter=bool)
@@ -86,7 +116,7 @@ class Fragfold3Params:
         validator=validators.instance_of(str),
     )
     use_fragment_msa: bool = field(default=True, converter=bool)
-    use_receptor_msas: bool = field(default=True, converter=bool)
+    use_target_msas: bool = field(default=True, converter=bool)
     msa_cache_dir: str | Path = field(default=config.MSA_CACHE_DIR)
     fragmentation_method: str = field(
         default="sliding_window",
@@ -106,6 +136,7 @@ class Fragfold3Params:
     @classmethod
     def from_dict(cls, d: dict[str, Any]):
         d = copy.deepcopy(d)
+        d = _migrate_receptor_keys(d)
         ssp_dict = d.pop("structure_score_params", {})
         # Backwards-compat: drop structure_score_params keys that are no longer fields (e.g. the
         # removed `chain_groups`), so old saved fragfold_params.yaml files still load.
@@ -127,7 +158,7 @@ class Fragfold3Params:
         Post-initialization processing to convert Path-like attributes to Path objects.
         """
         self.fragment_source_fasta = Path(self.fragment_source_fasta)
-        self.receptor_fastas = [Path(f) for f in self.receptor_fastas]
+        self.target_fastas = [Path(f) for f in self.target_fastas]
         self.msa_cache_dir = Path(self.msa_cache_dir)
         self.output_directory = Path(self.output_directory)
         if self.reference_pdb is not None:
@@ -148,7 +179,7 @@ class Fragfold3Params:
         Convert all Path-like attributes to absolute paths relative to the given root.
         """
         self.fragment_source_fasta = root / Path(self.fragment_source_fasta)
-        self.receptor_fastas = [root / Path(f) for f in self.receptor_fastas]
+        self.target_fastas = [root / Path(f) for f in self.target_fastas]
         self.msa_cache_dir = root / Path(self.msa_cache_dir)
         if self.reference_pdb is not None:
             self.reference_pdb = root / Path(self.reference_pdb)
@@ -280,8 +311,6 @@ def load_config(
     ```
     then the resulting Fragfold3Params object will have `fragment_length` set to 50.
 
-
-
     Parameters:
     -----------
     config_file: str | Path | None
@@ -339,10 +368,10 @@ def load_config(
         _resolve_for_read(param_ob.fragment_source_fasta),
         base,
     )
-    for i, receptor_slice_coord in enumerate(param_ob.receptor_slice_coords):
-        param_ob.receptor_slice_coords[i] = resolve_slice_coords(
-            receptor_slice_coord,
-            _resolve_for_read(param_ob.receptor_fastas[i]),
+    for i, target_slice_coord in enumerate(param_ob.target_slice_coords):
+        param_ob.target_slice_coords[i] = resolve_slice_coords(
+            target_slice_coord,
+            _resolve_for_read(param_ob.target_fastas[i]),
             base,
         )
     return param_ob

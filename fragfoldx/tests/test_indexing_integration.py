@@ -50,7 +50,7 @@ def _parse_name(stem):
 def _generate(base, frag, rec, out_dir):
     """Generate the input a3ms for one config; return (filenames, windows).
 
-    windows is a list of (start, end, receptor_query, fragment_query) where start/end are the
+    windows is a list of (start, end, target_query, fragment_query) where start/end are the
     display-base residue positions parsed from the filename.
     """
     import a3mcat
@@ -58,8 +58,8 @@ def _generate(base, frag, rec, out_dir):
     params = ffparams.load_config(
         fragment_source_fasta=str(FASTA),
         fragment_slice_coords=list(frag),
-        receptor_fastas=[str(FASTA)],
-        receptor_slice_coords=[list(rec)],
+        target_fastas=[str(FASTA)],
+        target_slice_coords=[list(rec)],
         indexing_base=str(base),
         fragment_length=30,
         stride=1,
@@ -83,13 +83,13 @@ def _generate(base, frag, rec, out_dir):
     [(0, (162, 193), (9, 316)), (1, (163, 194), (10, 317))],
 )
 def test_input_a3m_sequences_match_source(tmp_path, base, frag, rec):
-    """The sliced fragment/receptor queries in each generated a3m are the right residues."""
+    """The sliced fragment/target queries in each generated a3m are the right residues."""
     names, windows = _generate(base, frag, rec, tmp_path)
     assert windows, "no input a3ms were generated"
-    for start, end, receptor_q, fragment_q in windows:
+    for start, end, target_q, fragment_q in windows:
         # display-base residue N is python index N - base into S
         assert fragment_q == S[start - base : end - base + 1]
-        assert receptor_q == S[rec[0] - base : rec[1] - base + 1]
+        assert target_q == S[rec[0] - base : rec[1] - base + 1]
 
 
 @needs_msa
@@ -116,7 +116,7 @@ def test_committed_pdb_chains_match_source():
         start, end = _parse_name(pdb.name.split("_unrelaxed")[0])
         seqs = pdb_tools.extract_sequences_from_pdb(pdb)
         chains = sorted(seqs)
-        # a3m is built receptor + fragment, so chain A = receptor, last chain = fragment
+        # a3m is built target + fragment, so chain A = target, last chain = fragment
         assert seqs[chains[-1]] == S[start : end + 1]
         assert seqs[chains[0]] == S[9:317]
 

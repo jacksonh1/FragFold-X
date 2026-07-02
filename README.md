@@ -1,6 +1,6 @@
 # FragFold-X
 
-Predict how short peptide **fragments** of a protein bind to a full-length **receptor** protein, using AlphaFold2 (via ColabFold). fragfoldx slides a window along a protein sequence and, for each fragment, co-folds it against the receptor and scores the predicted interface. A peak in the score vs. fragment position points to a likely binding fragment.
+Predict how short peptide **fragments** of a protein bind to a full-length **target** protein, using AlphaFold2 (via ColabFold). fragfoldx slides a window along a protein sequence and, for each fragment, co-folds it against the target and scores the predicted interface. A peak in the score vs. fragment position points to a likely binding fragment.
 
 This is a reimplementation of the original [FragFold](https://github.com/swanss/FragFold) with a rewritten codebase. A few functions are adapted from the original and credited in their docstrings (in `fragfoldx/tools/pdb_tools.py` and `fragfoldx/structure_scoring/weighted_contacts.py`).
 
@@ -10,7 +10,7 @@ A. Savinov, S. Swanson, A. E. Keating, G.-W. Li. High-throughput discovery of in
 Written by Jackson C. Halpin.
 
 **What's different from the original:**
-- multiple domains/chains as the receptor
+- multiple domains/chains as the target
 - flexible fragmentation (sliding window of any stride, or fixed overlap)
 - a clean Python API rather than nextflow — generate inputs, run predictions, and score structures from python (see [Python API](#python-api))
 
@@ -68,27 +68,51 @@ fragfoldx.fragfoldx_pipeline(params)
 
 ### Paths and the root directory
 
-Every file path in the config (`fragment_source_fasta`, `receptor_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative. At run time, each path is resolved against:
+Paths inside the config (`fragment_source_fasta`, `target_fastas`, `msa_cache_dir`, `output_directory`, `reference_pdb`) may be absolute or relative:
 
-- the directory you pass as `--root DIR`, if given; otherwise
-- the current working directory.
+- **Absolute paths** are used exactly as written.
+- **Relative paths** are resolved at run time by joining them onto a base directory: `<base>/<path from the config>`.
 
-An **absolute** path always overrides `--root` (it's used as-is). So the simplest setup is to write paths relative to your project layout and run `fragfoldx` from that directory (this is what `examples/example1/run_example1.sh` does — its paths are relative to the repo root). To run the **same** config from somewhere else — submitting from a scratch directory, or moving the project to another machine — pass `--root` instead of editing every path:
+**What `--root` is for.** A relative path on its own is ambiguous — where it points depends on which directory you happen to run the command from. `--root DIR` names that base explicitly: every relative path in the config is joined onto `DIR` before the run (if you omit `--root`, the base is just your current working directory). This is what lets a config stay portable — you write its paths relative to one base directory, and `--root` says where that base lives on *this* machine. Move the project, or submit from a scratch directory, and you change only `--root`; the config never changes.
+
+So there are two sensible ways to write a config:
+
+- **Absolute paths** — simplest; they resolve the same way no matter where you run. The trade-off is the config is tied to one machine's layout.
+- **Relative paths + `--root`** — portable, as above.
+
+**Example.** A config at `/projects/ftsZ/config.yaml` containing:
+
+```yaml
+fragment_source_fasta: data/fragment_protein.fasta
+target_fastas:
+  - data/target_domain1.fasta
+```
+
+run with `--root /projects/ftsZ`:
 
 ```bash
-fragfoldx --input_params config.yaml --root /path/to/project
+fragfoldx --input_params /projects/ftsZ/config.yaml --root /projects/ftsZ
 ```
 
-`--root` is **purely a runtime resolution mechanism** — it is *not* recorded anywhere. The `fragfold_params.yaml` written into the output directory echoes your path strings **exactly as you wrote them**: relative paths stay relative (so the saved config — like your input config — remains portable and can be re-run elsewhere with `--root`), and absolute paths stay absolute (self-contained). Because root isn't stored, re-running a saved config with relative paths needs the same `--root` again. (The `colabfold_batch` / `colabfold_data` executable paths are **not** affected by `--root` — give those as absolute paths, or set them in the global config / environment variables.)
+resolves those FASTAs to `/projects/ftsZ/data/fragment_protein.fasta` and `/projects/ftsZ/data/target_domain1.fasta` (each relative path joined onto the root). The mechanism allows `fragfoldx` to be run from any directory and the paths in the config will be resolved relative to `root`. Additionally, you can copy the whole `ftsZ/` folder elsewhere and only `--root` changes — the config is untouched.
 
-From Python, pass `root=` to `load_config` (it's applied for reading the FASTAs) and to the pipeline (applied for the run):
+> Passing `--root` is optional: with no `--root`, relative paths resolve against your current directory (where you run fragfoldx). That's how `examples/example1/` runs — `run_example1.sh` is launched from inside `examples/example1/`, so the base is implicitly that directory (see `run_example1.sh`).
+
+**Two things `--root` does *not* apply to:**
+
+- **The `--input_params` path itself.** The config file is found relative to your current directory (or given as an absolute path); `--root` only affects the paths *inside* it.
+- **`colabfold_batch` / `colabfold_data`.** Give these as absolute paths, or set them in the global config / environment variables.
+
+**`--root` is never saved.** The `fragfold_params.yaml` written into the output directory echoes your path strings exactly as you wrote them — relative stays relative, absolute stays absolute — so a saved config is as portable as your input config, but re-running one that uses relative paths needs the same `--root` again.
+
+If you are calling fragfoldx from within python, you can pass `root=` to both `load_config` (used to read the FASTAs) and the pipeline (used for the run):
 
 ```python
-params = fragfoldx.load_config("config.yaml", root="/path/to/project")
-fragfoldx.fragfoldx_pipeline(params, root="/path/to/project")
+params = fragfoldx.load_config("config.yaml", root="/projects/ftsZ")
+fragfoldx.fragfoldx_pipeline(params, root="/projects/ftsZ")
 ```
 
-> **Generating configs programmatically?** `Fragfold3Params.save()` writes paths verbatim too, so build a params object (or dict) with the relative paths you want, `save()` it, transfer it, and run with `--root` on the target machine. `load_config()` reads the FASTAs to resolve slice coords (including the `-1` "to-the-end" sentinel), so if the data isn't on the machine where you're generating the yaml, build it with `Fragfold3Params.from_dict(...)` (no filesystem access) and let the coords resolve at run time on the target.
+> **Generating configs programmatically?** Saved YAMLs are portable — `Fragfold3Params.save()` writes every path exactly as given — so you can build a params object on one machine, `save()` it, copy it elsewhere, and run there with `--root`.
 
 ### Running on a SLURM cluster
 
@@ -130,17 +154,17 @@ fragment_length: 30                   # window width, in residues
 stride: 5                             # step between windows
 fragmentation_method: sliding_window  # or "overlap"
 
-# receptor: what each fragment is folded against (one or more domains/chains)
-receptor_fastas:
-  - data/receptor_domain1.fasta
-  - data/receptor_domain2.fasta
-receptor_slice_coords:
+# target: what each fragment is folded against (one or more domains/chains)
+target_fastas:
+  - data/target_domain1.fasta
+  - data/target_domain2.fasta
+target_slice_coords:
   - [12, 145]
   - [50, 210]
 
 indexing_base: "1"                    # are the coords above 1-based or 0-based?
 use_fragment_msa: true
-use_receptor_msas: true
+use_target_msas: true
 msa_cache_dir: data/MSAs/colabfold_mmseqs
 output_directory: examples/example1/output
 model_weights: alphafold2_ptm
@@ -164,15 +188,15 @@ structure_score_params:
 | --- | --- | --- | --- |
 | `fragment_source_fasta` | str | Protein that is sliced into fragments | required |
 | `fragment_slice_coords` | [int, int] | Region of the fragment protein to fragment (inclusive) | required |
-| `receptor_fastas` | list[str] | Receptor sequence(s) each fragment is folded against. Repeat a file for homo-oligomers | required |
-| `receptor_slice_coords` | list[[int, int]] | Slice for each receptor entry (same length as `receptor_fastas`) | required |
+| `target_fastas` | list[str] | Target sequence(s) each fragment is folded against. Repeat a file for homo-oligomers | required |
+| `target_slice_coords` | list[[int, int]] | Slice for each target entry (same length as `target_fastas`) | required |
 | `fragment_length` | int | Width of each fragment window, in residues | `30` |
 | `fragmentation_method` | `sliding_window` or `overlap` | How fragments are generated (see below) | `sliding_window` |
 | `stride` | int | Step between windows — **`sliding_window` mode only** | `1` |
 | `overlap_length` | int | Residues each window overlaps the previous — **`overlap` mode only** | `15` |
 | `indexing_base` | `"1"` or `"0"` | Whether the coords above are 1- or 0-based. Outputs honor this base | `"1"` |
 | `use_fragment_msa` | bool | Use a fragment MSA (`true`) or just the single query sequence (`false`, faster/less accurate) | `true` |
-| `use_receptor_msas` | bool | Use receptor MSAs (vs. single sequences) | `true` |
+| `use_target_msas` | bool | Use target MSAs (vs. single sequences) | `true` |
 | `msa_cache_dir` | str | Directory where downloaded MSAs are cached and reused — see [MSA cache](#msa-cache) | `config.MSA_CACHE_DIR` |
 | `output_directory` | str | Output folder | `fragfoldx_output` |
 | `model_weights` | str | ColabFold model preset: `alphafold2`, `alphafold2_ptm`, `alphafold2_multimer_v1`/`_v2`/`_v3`, or `deepfold_v1` | `alphafold2_ptm` |
@@ -194,28 +218,28 @@ In both cases the last window is shifted back to stay in-bounds, so it may overl
 
 **`structure_score_params`:**
 - `contact_distance_cutoff` (float, default `4.0`) — max atom-atom distance (Å) counted as a contact.
-- `chain_group_a` / `chain_group_b` (list[str] or `null`) — the two sides of the interface to count contacts between; set both or neither. **If left null (default), the last chain (the fragment) is one side and all other chains (the receptor) are the other** — i.e. fragment-vs-receptor contacts.
+- `chain_group_a` / `chain_group_b` (list[str] or `null`) — the two sides of the interface to count contacts between; set both or neither. **If left null (default), the last chain (the fragment) is one side and all other chains (the target) are the other** — i.e. fragment-vs-target contacts.
 - `n_processes` (int or `null`) — parallel workers for scoring (`null` = use all available / the SLURM allocation).
 
 ---
 
 ## MSA cache
 
-Before predicting, fragfoldx needs a multiple-sequence alignment (MSA) for the fragment-source protein and for each receptor (unless you disable them with `use_fragment_msa` / `use_receptor_msas`). Each MSA is downloaded once from the ColabFold MMseqs2 server and **cached on disk** in `msa_cache_dir` (default `<install>/data/MSAs/colabfold_mmseqs`), then reused on every later run.
+Before predicting, fragfoldx needs a multiple-sequence alignment (MSA) for the fragment-source protein and for each target (unless you disable them with `use_fragment_msa` / `use_target_msas`). Each MSA is downloaded once from the ColabFold MMseqs2 server and **cached on disk** in `msa_cache_dir` (default `<install>/data/MSAs/colabfold_mmseqs`), then reused on every later run.
 
 **How it works**
-- The MSA is downloaded for the **full sequence** in each FASTA and saved as `<msa_cache_dir>/<header>.a3m`, where `<header>` is the sequence id (the first whitespace-delimited token of the FASTA header). The domain slice (`fragment_slice_coords` / `receptor_slice_coords`) is applied *after* loading, in memory.
+- The MSA is downloaded for the **full sequence** in each FASTA and saved as `<msa_cache_dir>/<header>.a3m`, where `<header>` is the sequence id (the first whitespace-delimited token of the FASTA header). The domain slice (`fragment_slice_coords` / `target_slice_coords`) is applied *after* loading, in memory.
 - On each run, for every input fragfoldx looks for `<msa_cache_dir>/<header>.a3m`. If it exists, the download is **skipped** and the cached MSA is reused; otherwise it is downloaded and written there.
 
 **What this buys you**
-- Because the *full-length* MSA is cached and sliced in memory, one cached MSA is reused across runs that fragment **different regions** of the same protein, or that pair it with different receptors — the alignment is downloaded only once.
+- Because the *full-length* MSA is cached and sliced in memory, one cached MSA is reused across runs that fragment **different regions** of the same protein, or that pair it with different targets — the alignment is downloaded only once.
 - The cache is shared by every run that points at the same `msa_cache_dir`, so aim your configs at one shared directory to avoid re-downloading.
 
 **Gotchas**
 - ⚠️ **The cache key is the FASTA header, not the sequence.** Two different sequences that share a header id would collide on the same cache file. fragfoldx guards against this: on a cache hit it checks the cached MSA's query sequence against your input sequence and **raises an error** if they differ, telling you to rename the input header (recommended) or delete the stale cached `.a3m`. Still, give every protein a unique, descriptive header (e.g. `>ftsZ_ecoli`) to avoid the error in the first place.
 - New downloads need internet access to the MMseqs2 server. On a compute node with no outbound network, pre-populate the cache from a login node first — run the pipeline once, or call `colabfold_tools.colabfold_batch_MSA_wrapper` directly (see the [Python API](#python-api)) — then the offline run reuses it.
 - To force a fresh MSA, delete `<header>.a3m` (and the sibling ColabFold files) from `msa_cache_dir`.
-- `msa_cache_dir` is itself resolved relative to `--root`, like the other paths.
+- `msa_cache_dir` is itself resolved relative to `--root`, like the other paths unless an absolute path is provided.
 
 ---
 
@@ -257,11 +281,11 @@ colabfold_tools.colabfold_batch_MSA_wrapper(
     output_dir="MSA_directory/",
 )
 
-# 2. build a custom input: slice a fragment MSA and concatenate it onto a receptor MSA
+# 2. build a custom input: slice a fragment MSA and concatenate it onto a target MSA
 msa = a3mcat.MSAa3m.from_a3m_file("MSA_directory/input_sequence.a3m")
-receptor_msa = a3mcat.MSAa3m.from_a3m_file("MSA_directory/receptor_msa.a3m")
+target_msa = a3mcat.MSAa3m.from_a3m_file("MSA_directory/target_msa.a3m")
 fragment_msa = msa[0:100]               # first 100 residues
-combined_msa = receptor_msa + fragment_msa
+combined_msa = target_msa + fragment_msa
 combined_msa.save("combined_msa.a3m")
 
 # 3. run a structure prediction (pair-mode is always unpaired)

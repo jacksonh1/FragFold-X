@@ -12,9 +12,9 @@ model_weights: alphafold2_ptm
 msa_cache_dir: /mnt/shared2/jch/09-fragfold/tools/FragFold3/data/MSAs/colabfold_mmseqs
 output_directory: output
 overwrite: true
-receptor_fastas:
+target_fastas:
 - ftsZ_A0A140NFM6.fasta
-receptor_slice_coords:
+target_slice_coords:
 - - 9
   - 316
 reference_pdb: null

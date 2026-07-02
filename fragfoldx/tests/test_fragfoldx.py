@@ -64,8 +64,8 @@ def _load(base, frag, rec):
     return ffparams.load_config(
         fragment_source_fasta=str(FASTA),
         fragment_slice_coords=list(frag),
-        receptor_fastas=[str(FASTA)],
-        receptor_slice_coords=[list(rec)],
+        target_fastas=[str(FASTA)],
+        target_slice_coords=[list(rec)],
         indexing_base=str(base),
         output_directory="unused",
         warn_output_exists=False,
@@ -76,7 +76,7 @@ def test_load_config_does_not_force_zero_based():
     p = _load(1, (163, 194), (10, 317))
     assert p.indexing_base == "1"
     assert tuple(p.fragment_slice_coords) == (163, 194)
-    assert tuple(p.receptor_slice_coords[0]) == (10, 317)
+    assert tuple(p.target_slice_coords[0]) == (10, 317)
 
 
 def test_load_config_roundtrips_through_yaml(tmp_path):
@@ -87,7 +87,7 @@ def test_load_config_roundtrips_through_yaml(tmp_path):
         p2 = ffparams.load_config(config_file=yp)
         assert p2.indexing_base == str(base)
         assert tuple(p2.fragment_slice_coords) == frag
-        assert tuple(p2.receptor_slice_coords[0]) == rec
+        assert tuple(p2.target_slice_coords[0]) == rec
 
 
 # --- pair-mode is fixed to unpaired; extra_colabfold_params is a raw arg string ---
@@ -116,8 +116,8 @@ def test_extra_colabfold_params_accepts_string():
     p = ffparams.load_config(
         fragment_source_fasta=str(FASTA),
         fragment_slice_coords=[1, 30],
-        receptor_fastas=[str(FASTA)],
-        receptor_slice_coords=[[1, 100]],
+        target_fastas=[str(FASTA)],
+        target_slice_coords=[[1, 100]],
         extra_colabfold_params="--num-models 3",
         warn_output_exists=False,
     )
@@ -129,8 +129,8 @@ def _params_from_dict(**overrides):
     d = {
         "fragment_source_fasta": str(FASTA),
         "fragment_slice_coords": [1, 30],
-        "receptor_fastas": [str(FASTA)],
-        "receptor_slice_coords": [[1, 100]],
+        "target_fastas": [str(FASTA)],
+        "target_slice_coords": [[1, 100]],
     }
     d.update(overrides)
     return ffparams.Fragfold3Params.from_dict(d)
@@ -153,6 +153,27 @@ def test_extra_colabfold_params_rejects_non_string_non_dict():
     # a genuinely wrong type still fails loudly
     with pytest.raises((TypeError, ValueError)):
         _params_from_dict(extra_colabfold_params=42)
+
+
+def test_deprecated_receptor_keys_migrate_to_target():
+    # backwards-compat: old `receptor_*` config keys are remapped to their `target_*` names
+    d = {
+        "fragment_source_fasta": str(FASTA),
+        "fragment_slice_coords": [1, 30],
+        "receptor_fastas": [str(FASTA)],
+        "receptor_slice_coords": [[1, 100]],
+        "use_receptor_msas": False,
+    }
+    p = ffparams.Fragfold3Params.from_dict(d)
+    assert [str(f) for f in p.target_fastas] == [str(FASTA)]
+    assert list(p.target_slice_coords[0]) == [1, 100]
+    assert p.use_target_msas is False
+
+
+def test_conflicting_receptor_and_target_keys_fail_loudly():
+    # supplying both the deprecated and the new key is ambiguous — it must raise
+    with pytest.raises(ValueError):
+        _params_from_dict(receptor_fastas=[str(FASTA)])
 
 
 def test_structure_score_params_ignores_removed_chain_groups_key():
@@ -236,8 +257,8 @@ def test_load_config_with_root_preserves_relative_paths(tmp_path):
     p = ffparams.load_config(
         fragment_source_fasta="data/p.fasta",
         fragment_slice_coords=[1, 5],
-        receptor_fastas=["data/p.fasta"],
-        receptor_slice_coords=[[1, -1]],   # -1 must resolve via the root-applied read
+        target_fastas=["data/p.fasta"],
+        target_slice_coords=[[1, -1]],   # -1 must resolve via the root-applied read
         msa_cache_dir="msas",
         output_directory="out",
         warn_output_exists=False,
@@ -246,7 +267,7 @@ def test_load_config_with_root_preserves_relative_paths(tmp_path):
     # stored paths are untouched (still relative); the -1 sentinel resolved against the 10-mer
     assert str(p.fragment_source_fasta) == "data/p.fasta"
     assert str(p.msa_cache_dir) == "msas"
-    assert tuple(p.receptor_slice_coords[0]) == (1, 10)
+    assert tuple(p.target_slice_coords[0]) == (1, 10)
     # save echoes them verbatim — the saved yaml stays portable
     out = tmp_path / "saved.yaml"
     p.save(out)
@@ -263,8 +284,8 @@ def test_load_config_with_root_keeps_absolute_paths_absolute(tmp_path):
     p = ffparams.load_config(
         fragment_source_fasta=str(fasta),     # absolute -> overrides root
         fragment_slice_coords=[1, 5],
-        receptor_fastas=[str(fasta)],
-        receptor_slice_coords=[[1, 5]],
+        target_fastas=[str(fasta)],
+        target_slice_coords=[[1, 5]],
         msa_cache_dir=str(abs_cache),         # absolute, outside root
         output_directory="out",
         warn_output_exists=False,
@@ -281,8 +302,8 @@ def test_load_config_with_root_dot_does_not_crash(tmp_path, monkeypatch):
     p = ffparams.load_config(
         fragment_source_fasta="data/p.fasta",
         fragment_slice_coords=[1, 5],
-        receptor_fastas=["data/p.fasta"],
-        receptor_slice_coords=[[1, 5]],
+        target_fastas=["data/p.fasta"],
+        target_slice_coords=[[1, 5]],
         warn_output_exists=False,
         root=Path("."),
     )

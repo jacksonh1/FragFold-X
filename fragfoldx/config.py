@@ -78,7 +78,7 @@ MSA_CACHE_DIR = DATA_DIR / "MSAs/colabfold_mmseqs"  # directory for storing MSA 
 # ==============================================================================
 
 COLABFOLD_PDB_PREDICTION_FILENAME_REGEX = r'(?P<name>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb'
-PDB_FILENAME_REGEX = r'(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb'
+PDB_FILENAME_REGEX = r'(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<target_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.*\.pdb'
 
 
 # version
@@ -88,6 +88,6 @@ PDB_FILENAME_REGEX = r'(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fra
 #     __version__ = "0.0.0"
 
 
-# PDB_FILENAME_REGEX = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.+\.pdb"
-# PDB_ALIGNED_FILENAME_REGEX = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d\.pdb"
+# PDB_FILENAME_REGEX = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<target_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d.+\.pdb"
+# PDB_ALIGNED_FILENAME_REGEX = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<target_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d\.pdb"
 

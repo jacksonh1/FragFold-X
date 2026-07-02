@@ -1,8 +1,8 @@
 # %%
 """
 inputs:
-- receptor MSAs - <list or path> (if isinstance, convert to list)
-- receptor slice coords (1 based)
+- target MSAs - <list or path> (if isinstance, convert to list)
+- target slice coords (1 based)
 - fragment source - <path>
 - fragment slice coords (1 based)
 - stride
@@ -69,7 +69,7 @@ class DomainMSA:
 
     def _import_a3m(self) -> a3mcat.MSAa3m:
         """
-        Import the receptor MSA using a3mcat.
+        Import the target MSA using a3mcat.
         """
         if not self.msa_file.exists():
             raise FileNotFoundError(f"MSA file {self.msa_file} does not exist.")
@@ -276,15 +276,15 @@ def gen_fragment_indices_by_sliding(
 # // a3m preparation functions
 # ==============================================================================
 
-def prepare_receptor_msa(
-    receptor_fastas: list[str | Path],
-    receptor_slice_coords: list[tuple[int, int]],
+def prepare_target_msa(
+    target_fastas: list[str | Path],
+    target_slice_coords: list[tuple[int, int]],
     msa_cache_dir: str | Path,
     use_msas: bool = True,
     **kwargs,
 ):
-    _receptor_msas = []
-    for fasta_file, domain_coords in zip(receptor_fastas, receptor_slice_coords):
+    _target_msas = []
+    for fasta_file, domain_coords in zip(target_fastas, target_slice_coords):
         if use_msas:
             msa_file = get_colabfold_msa(
                 fasta_file=fasta_file,
@@ -302,13 +302,13 @@ def prepare_receptor_msa(
                 domain_start=domain_coords[0],
                 domain_end=domain_coords[1],
             )
-        _receptor_msas.append(domain_msa)
-    receptor_msa = _receptor_msas[0].sliced_msa
-    receptor_name = _receptor_msas[0].name
-    for domain_msa in _receptor_msas[1:]:
-        receptor_msa += domain_msa.sliced_msa
-        receptor_name += f"-{domain_msa.name}"
-    return receptor_msa, receptor_name
+        _target_msas.append(domain_msa)
+    target_msa = _target_msas[0].sliced_msa
+    target_name = _target_msas[0].name
+    for domain_msa in _target_msas[1:]:
+        target_msa += domain_msa.sliced_msa
+        target_name += f"-{domain_msa.name}"
+    return target_msa, target_name
 
 
 def prepare_fragment_source_msa(
@@ -350,20 +350,20 @@ def prepare_input_a3ms(params: ffparams.Fragfold3Params):
     # here) for slicing the MSAs, since a3mcat uses python slicing. The output filenames
     # below are built from the display-base coords directly, so they honor the input base.
     base = int(params.indexing_base)
-    receptor_slice_coords_0 = [
-        (start - base, end - base) for start, end in params.receptor_slice_coords
+    target_slice_coords_0 = [
+        (start - base, end - base) for start, end in params.target_slice_coords
     ]
     fragment_slice_coords_0 = (
         params.fragment_slice_coords[0] - base,
         params.fragment_slice_coords[1] - base,
     )
-    receptor_msa, receptor_name = prepare_receptor_msa(
-        receptor_fastas=params.receptor_fastas,
-        receptor_slice_coords=receptor_slice_coords_0,
+    target_msa, target_name = prepare_target_msa(
+        target_fastas=params.target_fastas,
+        target_slice_coords=target_slice_coords_0,
         msa_cache_dir=params.msa_cache_dir,
         colabfold_executable=params.colabfold_batch,
         colabfold_data=params.colabfold_data,
-        use_msas=params.use_receptor_msas,
+        use_msas=params.use_target_msas,
     )
     fragment_source_msa, fragment_source_name = prepare_fragment_source_msa(
         fragment_source_fasta=params.fragment_source_fasta,
@@ -393,14 +393,14 @@ def prepare_input_a3ms(params: ffparams.Fragfold3Params):
     a3m_files = []
     for fragment_index in fragment_indices:
         start, end = fragment_index
-        name = f"{fragment_source_name}-{params.fragment_slice_coords[0] + start}to{params.fragment_slice_coords[0] + end}_vs_{receptor_name}"
+        name = f"{fragment_source_name}-{params.fragment_slice_coords[0] + start}to{params.fragment_slice_coords[0] + end}_vs_{target_name}"
         file_name = af_input_dir / f"{name}.a3m"
         a3m_files.append(file_name)
         if file_name.exists():
             logger.info(f"{file_name} exists. Skipping")
             continue
         fragment_msa = fragment_source_msa[start : end + 1]
-        prediction_input_a3m = receptor_msa + fragment_msa
+        prediction_input_a3m = target_msa + fragment_msa
         prediction_input_a3m.save(file_name)
     return a3m_files, af_input_dir
 
@@ -497,16 +497,16 @@ def plot_results(params: ffparams.Fragfold3Params):
             f"Summary CSV file {summary_csv} does not exist. Run create_summary_csv first."
         )
     filename1 = Path(params.output_directory) / "position_plot.html"
-    receptors = [i.stem for i in params.receptor_fastas]
+    targets = [i.stem for i in params.target_fastas]
     fragment_source = params.fragment_source_fasta.stem
     fig, df = plotting.plotly_fragfold_results(
         summary_csv,
         fragment_source_label=fragment_source,
-        receptor_labels=receptors,
+        target_labels=targets,
         xcol="fragment_start",
     )
     fig.write_html(filename1)
-    title = f"fragment source: {fragment_source} - receptor(s): {' + '.join(receptors)}"
+    title = f"fragment source: {fragment_source} - target(s): {' + '.join(targets)}"
     filename2 = Path(params.output_directory) / "position_plot.png"
     fig, ax = plotting.plot_fragfold_results(
         df=df,

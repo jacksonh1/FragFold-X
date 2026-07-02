@@ -13,11 +13,6 @@ msa_cache_dir: /orcd/pool/004/jhalpin/09-fragfold/tools/FragFold3/data/MSAs/cola
 output_directory: output
 overlap_length: 15
 overwrite: true
-receptor_fastas:
-- ftsZ_A0A140NFM6.fasta
-receptor_slice_coords:
-- - 9
-  - 316
 reference_pdb: null
 stride: 1
 structure_score_params:
@@ -25,6 +20,11 @@ structure_score_params:
   chain_group_b: null
   contact_distance_cutoff: 4.0
   n_processes: null
+target_fastas:
+- ftsZ_A0A140NFM6.fasta
+target_slice_coords:
+- - 9
+  - 316
 use_fragment_msa: true
-use_receptor_msas: true
+use_target_msas: true
 warn_output_exists: true

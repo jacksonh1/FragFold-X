@@ -45,7 +45,7 @@ def _format_bar_plot(ax, xlabel_sequence: str):
 def plotly_fragfold_results(
     csv_file,
     fragment_source_label,
-    receptor_labels,
+    target_labels,
     cols=None,
     xcol="fragment_center",
     weight_set: str | None = None,
@@ -72,7 +72,7 @@ def plotly_fragfold_results(
         rows=len(cols),
         cols=1,
         subplot_titles=[
-            f"fragment source: {fragment_source_label} - receptor(s): {' + '.join(receptor_labels)}"
+            f"fragment source: {fragment_source_label} - target(s): {' + '.join(target_labels)}"
             for col in cols
         ],
         vertical_spacing=0.15,
@@ -313,21 +313,21 @@ def visualize_pdb_structures_chain_aln(
 def plot_structure_and_frag_center_of_mass(
     reference_pdb_file,
     fragment_model_pdb_files,
-    ref_receptor_chains: str | list | None = None,
+    ref_target_chains: str | list | None = None,
     fragment_chain=None,
     opacity=0.5,
 ):
-    # if ref_receptor_chains is None:
-    #     ref_receptor_chains = pdb_tools.get_chains_from_structure(reference_pdb_file)[:-1]
-    if isinstance(ref_receptor_chains, str):
-        ref_receptor_chains = [ref_receptor_chains]
+    # if ref_target_chains is None:
+    #     ref_target_chains = pdb_tools.get_chains_from_structure(reference_pdb_file)[:-1]
+    if isinstance(ref_target_chains, str):
+        ref_target_chains = [ref_target_chains]
     view = py3Dmol.view(height=600, width=800)
     with open(reference_pdb_file, "r") as f:
         pdb_string = f.read()
     view.addModel(pdb_string, "pdb")
     view.setStyle({"cartoon": {"colorscheme": "chain", "opacity": opacity}})
-    if ref_receptor_chains is not None:
-        for chain in ref_receptor_chains:
+    if ref_target_chains is not None:
+        for chain in ref_target_chains:
             view.setStyle(
                 {"chain": chain}, {"cartoon": {"color": "gray", "opacity": opacity}}
             )

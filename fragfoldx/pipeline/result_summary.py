@@ -16,23 +16,23 @@ output:
 - structure_scores.csv (in the input directory)
     - pdb information
     - fragment position
-    - name for fragment source and receptor
+    - name for fragment source and target
     - parameter file
     - dockQ score (vs reference)
         - this will require defining the chains in the reference pdb
-        - for model, the peptide chain is the last chain and the receptor chains are everything before it
+        - for model, the peptide chain is the last chain and the target chains are everything before it
     - rank (from pdb filename)
     - ipTM score
 """
 # x = "Q96F46-33to62_vs_Q16552-Q16552_unrelaxed_rank_001_alphafold2_ptm_model_5_seed_000.pdb"
-# regex = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<receptor_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d\.pdb"
+# regex = r"(?P<fragment_protein>.+)-(?P<fragment_start>\d+)to(?P<fragment_end>\d+)_vs_(?P<target_proteins>.+)_\w+_rank_(?P<rank>\d+)_(?P<weights>.+)_model_._seed_\d\d\d\.pdb"
 # p = re.compile(regex)
 # m = p.match(x)
 # print(
 #     m.group("fragment_protein"),
 #     int(m.group("fragment_start")),
 #     int(m.group("fragment_end")),
-#     m.group("receptor_proteins"),
+#     m.group("target_proteins"),
 #     int(m.group("rank")),
 # )
 
@@ -61,9 +61,9 @@ def parse_pdb_filename(
     d["fragment_start"] = int(d["fragment_start"])
     d["fragment_end"] = int(d["fragment_end"])
     d["rank"] = int(d["rank"])
-    # Split on _vs_ separator, then split receptor proteins on '-' only between protein names (not within isoforms)
-    # This assumes receptor_proteins is a string like "P15692-4-P15692-4" or "Q5VWK5-Q5VWK5"
-    d["receptor_proteins"] = re.findall(r'[a-zA-Z0-9]+(?:-\d+)?', d["receptor_proteins"])
+    # Split on _vs_ separator, then split target proteins on '-' only between protein names (not within isoforms)
+    # This assumes target_proteins is a string like "P15692-4-P15692-4" or "Q5VWK5-Q5VWK5"
+    d["target_proteins"] = re.findall(r'[a-zA-Z0-9]+(?:-\d+)?', d["target_proteins"])
     return d
 
 
