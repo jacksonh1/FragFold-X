@@ -77,7 +77,6 @@ Paths inside the config (`fragment_source_fasta`, `target_fastas`, `msa_cache_di
 - **Absolute paths** are used exactly as written.
 - **Relative paths** are resolved by joining them onto a base directory. **By default the base is the directory containing the config file** — so a relative path like `data/x.fasta` in `/projects/ftsZ/config.yaml` points at `/projects/ftsZ/data/x.fasta`, no matter which directory you run `fragfoldx` from.
 
-Config-file-relative resolution is what makes a config portable: write every path relative to the config's own folder, and the config runs the same from any working directory. Move the whole folder — to a scratch dir or another machine — and nothing inside the config needs to change.
 
 **Example.** A config at `/projects/ftsZ/config.yaml` containing:
 
@@ -92,7 +91,9 @@ resolves to `/projects/ftsZ/data/fragment_protein.fasta`, `/projects/ftsZ/data/t
 
 ```bash
 cd /projects/ftsZ && fragfoldx --input_params config.yaml
-# ...or, from anywhere:
+```
+...or, from anywhere:
+```bash
 fragfoldx --input_params /projects/ftsZ/config.yaml
 ```
 
@@ -116,7 +117,7 @@ params = fragfoldx.load_config("/projects/ftsZ/config.yaml")   # base = /project
 fragfoldx.fragfoldx_pipeline(params)
 ```
 
-> **Generating configs programmatically?** `Fragfold3Params.save()` writes every path exactly as given, so you can build a params object with relative paths, `save()` it into the folder those paths are relative to, copy that folder elsewhere, and run it there unchanged.
+> **Generating configs programmatically?** `Fragfold3Params.save()` writes every path exactly as given, so you can build a params object with relative paths, `save()` it into the folder those paths are relative to, copy that folder elsewhere, and run it there unchanged. see [examples/example3_programmatic_configs/](examples/example3_programmatic_configs/) for an example.
 
 > **Note (behavior change):** relative paths now resolve against the **config file's directory** by default. Previously they resolved against the current working directory (and `--root` was required for portability). Configs that use absolute paths, or that are run from the config's own directory, are unaffected; otherwise pass `--root` to reproduce the old base.
 
@@ -130,7 +131,7 @@ fragfoldx --input_params config.yaml --colabfold_scheduler slurm --colabfold_max
 
 fragfoldx submits each prediction with `sbatch` and keeps the queue topped up to `--colabfold_max_jobs_allowed` until all are done. Because it monitors until completion, you'll usually submit the `fragfoldx` command itself as a job too — see `examples/example2_slurm/run_example2.sh`.
 
-**sbatch settings** come from a JSON file. By default that's `fragfoldx/job_schedulers/colabfold_sbatch_params.json` (edit it in place, since the install is editable). To use a different file, either set the `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` environment variable or pass `--colabfold_sbatch_param_file /path/to/file.json`. Only one file is used — they are **not** merged — with precedence: CLI flag > environment variable > default file. Example file:
+**sbatch settings** apply to the colabfold jobs dispatched by fragfoldx. They come from a JSON file. By default that's `fragfoldx/job_schedulers/colabfold_sbatch_params.json` (edit it in place, since the install is editable). To use a different file, either set the `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` environment variable or pass `--colabfold_sbatch_param_file /path/to/file.json`. Only one file is used — they are **not** merged — with precedence: CLI flag > environment variable > default file. Example file:
 
 ```json
 {
