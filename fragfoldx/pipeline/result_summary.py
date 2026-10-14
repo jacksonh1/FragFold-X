@@ -67,26 +67,6 @@ def parse_pdb_filename(
     return d
 
 
-def score_pdb_files(
-    input_directory: Path | str,
-    output_file: Path | str | None = None,
-    regex=config.PDB_FILENAME_REGEX,
-):
-    input_directory = Path(input_directory)
-    if output_file is None:
-        output_file = input_directory / "structure_scores.csv"
-    res = []
-    for p in tqdm.tqdm(list(input_directory.rglob("*.pdb"))):
-        temp = parse_pdb_filename(p, regex)
-        temp["fragment_center"] = ((temp["fragment_start"] + temp["fragment_end"]) / 2)# + 1  # type: ignore
-        d = weighted_contacts.calculate_weighted_contacts(p)
-        temp.update(d)
-        temp["pdb_file"] = str(p.resolve())
-        res.append(temp)
-    structure_scores = pd.DataFrame(res)
-    structure_scores = structure_scores.sort_values(["fragment_start", "rank"])
-
-
 # parse_pdb_filename(
 #     "Q16552-118to147_vs_Q96F46-Q8NAC3_unrelaxed_alphafold2_multimer_v3_model_2_seed_000.pdb"
 # )
@@ -155,8 +135,10 @@ def score_pdb_files_multiprocessing(
         i for i in input_directory.rglob(pdb_file_pat) if "-aligned" not in i.name
     ]  # aligned?
     if len(pdb_files) == 0:
-        logger.warning(f"No pdb files found in {input_directory}")
-        return
+        raise FileNotFoundError(
+            f"No pdb files matching {pdb_file_pat!r} found in {input_directory}. Predictions are "
+            "missing — the colabfold step did not produce output. Not writing a scores CSV."
+        )
     if n_processes is None:
         n_processes = get_cpu_count()
     logger.info(f"Using {n_processes} processes")

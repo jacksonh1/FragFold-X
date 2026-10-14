@@ -77,6 +77,7 @@ Paths inside the config (`fragment_source_fasta`, `target_fastas`, `msa_cache_di
 - **Absolute paths** are used exactly as written.
 - **Relative paths** are resolved by joining them onto a base directory. **By default the base is the directory containing the config file** — so a relative path like `data/x.fasta` in `/projects/ftsZ/config.yaml` points at `/projects/ftsZ/data/x.fasta`, no matter which directory you run `fragfoldx` from.
 
+Config-file-relative resolution is what makes a config portable: write every path relative to the config's own folder, and the config runs the same from any working directory. Move the whole folder — to a scratch dir or another machine — and nothing inside the config needs to change.
 
 **Example.** A config at `/projects/ftsZ/config.yaml` containing:
 
@@ -91,9 +92,7 @@ resolves to `/projects/ftsZ/data/fragment_protein.fasta`, `/projects/ftsZ/data/t
 
 ```bash
 cd /projects/ftsZ && fragfoldx --input_params config.yaml
-```
-...or, from anywhere:
-```bash
+# ...or, from anywhere:
 fragfoldx --input_params /projects/ftsZ/config.yaml
 ```
 
@@ -117,7 +116,7 @@ params = fragfoldx.load_config("/projects/ftsZ/config.yaml")   # base = /project
 fragfoldx.fragfoldx_pipeline(params)
 ```
 
-> **Generating configs programmatically?** `Fragfold3Params.save()` writes every path exactly as given, so you can build a params object with relative paths, `save()` it into the folder those paths are relative to, copy that folder elsewhere, and run it there unchanged. see [examples/example3_programmatic_configs/](examples/example3_programmatic_configs/) for an example.
+> **Generating configs programmatically?** `Fragfold3Params.save()` writes every path exactly as given, so you can build a params object with relative paths, `save()` it into the folder those paths are relative to, copy that folder elsewhere, and run it there unchanged.
 
 > **Note (behavior change):** relative paths now resolve against the **config file's directory** by default. Previously they resolved against the current working directory (and `--root` was required for portability). Configs that use absolute paths, or that are run from the config's own directory, are unaffected; otherwise pass `--root` to reproduce the old base.
 
@@ -129,23 +128,36 @@ To run the many fragment predictions in parallel as separate SLURM jobs, add `--
 fragfoldx --input_params config.yaml --colabfold_scheduler slurm --colabfold_max_jobs_allowed 2
 ```
 
-fragfoldx submits each prediction with `sbatch` and keeps the queue topped up to `--colabfold_max_jobs_allowed` until all are done. Because it monitors until completion, you'll usually submit the `fragfoldx` command itself as a job too — see `examples/example2_slurm/run_example2.sh`.
+fragfoldx submits each prediction with `sbatch` and keeps the queue topped up to the `max_jobs_allowed` throttle until all are done. Because it monitors until completion, you'll usually submit the `fragfoldx` command itself as a job too — see `examples/example2_slurm/run_example2.sh`. It waits however long the jobs take (no time limit); if a prediction's job leaves the queue without finishing, it **errors** naming the missing ones rather than scoring a partial set — rerun to resubmit just those.
 
-**sbatch settings** apply to the colabfold jobs dispatched by fragfoldx. They come from a JSON file. By default that's `fragfoldx/job_schedulers/colabfold_sbatch_params.json` (edit it in place, since the install is editable). To use a different file, either set the `FRAGFOLD3_COLABFOLD_SBATCH_PARAM_FILE` environment variable or pass `--colabfold_sbatch_param_file /path/to/file.json`. Only one file is used — they are **not** merged — with precedence: CLI flag > environment variable > default file. Example file:
+**sbatch settings** are a `colabfold_slurm` section in your run YAML — the same config file as everything else, so the settings are recorded in the run's `fragfold_params.yaml`. Flags for `sbatch` go under `sbatch:` **by their real sbatch names** (the leading dashes are optional — there are no renamed aliases); the keys beside it are fragfoldx controls:
 
-```json
-{
-    "--job-name": "colabfold",
-    "-c": 5,
-    "--partition": "pi_keating",
-    "--output": "logs/colabfold_%A_%a.out",
-    "--error": "logs/colabfold_%A_%a.err",
-    "--gres": "gpu:1",
-    "--mem": 20000
-}
+```yaml
+colabfold_slurm:
+  max_jobs_allowed: 4      # max jobs of THIS run in the queue at once (fragfoldx throttle)
+  job_name_prefix: ff      # queue name becomes <prefix>-<target>-<uuid>, unique per run
+  sbatch:                  # passed to sbatch verbatim
+    partition: mit_normal_gpu
+    gres: "gpu:1"          # ColabFold uses ~a whole GPU per job — one job per GPU
+    time: "1:00:00"
+    mem: 20000
+    cpus-per-task: 4
+    constraint: rocky8     # any other sbatch flag works too
 ```
 
-> ColabFold uses essentially a whole GPU per job, so run one job per GPU rather than several on one.
+Everything is optional. fragfoldx sets `--job-name` / `--output` / `--error` itself (don't put those in `sbatch`). `--colabfold_max_jobs_allowed N` on the command line overrides `max_jobs_allowed` for a single run (and the override is still recorded).
+
+**Job naming / throttling:** the queue name is generated unique per run (`<prefix>-<target>-<8-char-uuid>`), and throttling counts only jobs with that exact name — so two concurrent fragfoldx runs never throttle each other, even with the same `job_name_prefix`.
+
+**Cluster-specific defaults:** `partition`, `gres`, etc. differ per cluster. Put site defaults in a small YAML file and point `FRAGFOLDX_COLABFOLD_SLURM_DEFAULTS` at it; its values fill any `colabfold_slurm` setting you don't set in your run YAML (your config always wins; `sbatch` flags are merged key-by-key). The resolved values are still written into `fragfold_params.yaml`, so the run record stays self-contained.
+
+```yaml
+# cluster defaults file (FRAGFOLDX_COLABFOLD_SLURM_DEFAULTS)
+sbatch:
+  partition: mit_normal_gpu
+  gres: "gpu:1"
+  time: "1:00:00"
+```
 
 ---
 
@@ -181,6 +193,14 @@ structure_score_params:
   chain_group_a: ["A"]
   chain_group_b: ["B"]
   n_processes: 4
+
+# SLURM settings for the colabfold jobs (only used with --colabfold_scheduler slurm).
+# All optional; sbatch flags go under `sbatch:` by their real names. See "Running on a SLURM cluster".
+colabfold_slurm:
+  max_jobs_allowed: 4
+  sbatch:
+    partition: mit_normal_gpu
+    gres: "gpu:1"
 ```
 
 **Coordinates** are residue positions in the base set by `indexing_base` (`"1"` = 1-based, the default and the UniProt/PDB convention; `"0"` = 0-based). Both ends are inclusive, so `[162, 191]` is a 30-residue fragment, and `-1` means "the last residue." **Outputs use the same base you put in** — 1-based in, 1-based out.
@@ -211,6 +231,7 @@ structure_score_params:
 | `colabfold_batch` | str | Path to `colabfold_batch` (overrides global config) | `config.COLABFOLD_BATCH` |
 | `colabfold_data` | str | Path to ColabFold data dir (overrides global config) | `config.COLABFOLD_DATA` |
 | `structure_score_params` | dict | Scoring settings (see below) | defaults below |
+| `colabfold_slurm` | dict | SLURM sbatch settings for the colabfold jobs (see [Running on a SLURM cluster](#running-on-a-slurm-cluster)); only used with `--colabfold_scheduler slurm` | defaults there |
 | `reference_pdb` | str | Optional reference structure; currently just copied to the output (scoring not yet implemented) | `null` |
 | `overwrite` | bool | Regenerate the input a3m files (only). To redo everything, delete the output dir | `true` |
 | `warn_output_exists` | bool | Error out if the output dir already exists | `true` |

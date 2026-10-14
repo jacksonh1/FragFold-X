@@ -12,3 +12,11 @@ target_fastas:
 target_slice_coords:
 - [9, 316]
 stride: 1
+colabfold_slurm:
+  max_jobs_allowed: 2
+  sbatch:
+    partition: mit_normal_gpu
+    gres: "gpu:1"
+    time: "1:00:00"
+    mem: 20000
+    cpus-per-task: 4

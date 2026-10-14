@@ -594,13 +594,11 @@ def fragfoldx_pipeline(
 
 def fragfoldx_pipeline_scheduler(
     params: ffparams.Fragfold3Params,
-    job_submitter: slurm_job_submitter.SlurmJobSubmitter = slurm_job_submitter.colabfold_sbatch_submitter,
     root: str | Path | None = None,
-    max_jobs_allowed=2,
     clean_files: bool = False,
-    **job_submitter_kwargs,
 ):
     """distribute the individual predictions across any number of nodes using SLURM."""
+    job_submitter = slurm_job_submitter.SlurmJobSubmitter(params.colabfold_slurm)
     # See fragfoldx_pipeline: resolve relative paths against the base (config dir, or an explicit
     # `root` override), then save the RESOLVED (absolute) params as a self-contained run record.
     params.convert_paths2abs(base=root)
@@ -628,18 +626,40 @@ def fragfoldx_pipeline_scheduler(
             parameters=params,
         )
         # submit the commands to the job scheduler
-        job_submitter.watch_and_submit(colab_cmds, max_jobs_allowed=max_jobs_allowed, **job_submitter_kwargs)
+        job_submitter.watch_and_submit(
+            colab_cmds, max_jobs_allowed=params.colabfold_slurm.max_jobs_allowed
+        )
         all_done = False
-    timeout_limit = 60 * 60 * 6  # 6 hours
-    start_time = time.time()
-    while not all_done:
-        all_done = check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir)
-        if not all_done:
-            logger.info("Waiting for all jobs to finish...")
-            time.sleep(5)
-        if time.time() - start_time > timeout_limit:
-            logger.info("Timeout reached. Exiting...")
-            break
+    # Wait for the final in-flight jobs to finish before scoring (watch_and_submit returns once
+    # the last job is submitted, not completed). We do NOT cap this on wall-clock time: a large
+    # sweep through a busy queue can legitimately take days. Instead, detect failure by job
+    # presence: if no jobs for this run remain pending/running, the stragglers have left the
+    # queue. That alone does not mean success OR failure — a job that just finished leaves the
+    # queue slightly before its .done.txt flag is visible on this node (NFS propagation). So once
+    # the queue is empty we give the flags a bounded grace (`settle_grace`) to appear; only if
+    # the predictions are still not all done after that grace do we fail loudly rather than score
+    # a partial set. The grace timer resets if jobs reappear (e.g. a requeue).
+    sleep_time = 5
+    settle_grace = params.colabfold_slurm._JOB_COMPLETION_GRACE_S
+    empty_since = None
+    while not (all_done := check_all_done(input_a3ms=a3m_files, predictions_dir=predictions_dir)):
+        if job_submitter.count_jobs() == 0:
+            if empty_since is None:
+                empty_since = time.time()
+            elif time.time() - empty_since >= settle_grace:
+                missing = get_unfinished_a3m_files(
+                    input_a3ms=a3m_files, predictions_dir=predictions_dir
+                )
+                raise RuntimeError(
+                    f"{len(missing)} colabfold prediction(s) did not complete and no jobs remain "
+                    f"in the queue for this run ({params.colabfold_slurm.job_name}) after a "
+                    f"{settle_grace}s grace. Unfinished inputs: {[m.name for m in missing]}. "
+                    "Rerun to resubmit only the missing predictions."
+                )
+        else:
+            empty_since = None  # jobs present again; reset the grace timer
+        logger.info("Waiting for all jobs to finish...")
+        time.sleep(sleep_time)
     if params.reference_pdb is not None:
         if not Path(params.reference_pdb).exists():
             logger.warning(f"reference pdb {params.reference_pdb} does not exist, skipping copy.")
